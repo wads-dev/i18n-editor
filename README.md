@@ -77,13 +77,14 @@ i18n-edit export
 i18n-edit export --file review.bundle.json
 ```
 
-The export command shows the same status and unified-diff preview before asking for confirmation. Use `--no-diff` for the compact plan, and use `--yes` or `-y` only in automation or after reviewing the plan:
+The export command shows the same status and unified-diff preview before asking for confirmation. Divergent files are warnings and remain preserved unless the project enables `deletion.autoDelete` or the command explicitly receives `--delete`. Use `--no-diff` for the compact plan, and use `--yes` or `-y` only in automation or after reviewing the plan:
 
 ```sh
-i18n-edit export --file review.bundle.json --yes
+i18n-edit export --file review.bundle.json --delete
+i18n-edit export --file review.bundle.json --delete --yes
 ```
 
-Each configured `i18n` directory is fully managed. Generated `base.ts`, language files and the configured root catalog are written; files left inside those directories but absent from the plan are removed after confirmation. Files outside managed `i18n` directories are never deleted. Writes are restricted to the selected project directory and use a temporary file followed by an atomic rename.
+Each configured `i18n` directory is checked against the generated plan. Generated `base.ts`, language files and the configured root catalog are written; other files become deletion candidates unless their extensions are ignored by project configuration. Set `deletion` to `false` to disable this detection entirely. Files outside configured `i18n` directories are never candidates. Writes are restricted to the selected project directory and use a temporary file followed by an atomic rename.
 
 After the npm package is published, its binaries will be named `i18n-edit` and `i18n-editor`.
 

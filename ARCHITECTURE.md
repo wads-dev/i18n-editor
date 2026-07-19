@@ -37,6 +37,8 @@ The default project is the process working directory. CLI arguments override dis
 - Interactive use requires explicit confirmation. `--yes` is the opt-in non-interactive mode.
 - Every destination is validated to remain inside the selected project root.
 - Changed files are written through a sibling temporary file and atomically renamed.
-- A configured `i18n` directory is fully managed: files absent from the generated plan are marked for deletion.
+- A configured `i18n` directory is checked for files absent from the generated plan unless `deletion` is `false`. Ignored extensions are preserved and omitted from warnings.
+- Deletion candidates are warnings by default. They are removed only with CLI `--delete` or project-level `deletion.autoDelete`, and remain subject to interactive confirmation unless `--yes` is used.
 - Files outside managed `i18n` directories are never deleted.
 - Existing interface names, leaf property types and required type imports are preserved when available. This retains public type names, literal unions and function signatures during round-trips.
+- Generated source follows `exportConfig.codeFormat`. Formatter discovery and post-export commands are future integrations; any command execution must be explicit, project-controlled and outside the environment-neutral generator.

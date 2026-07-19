@@ -39,8 +39,7 @@ function getProjectOptions(command: Command, bundleFile?: string) {
   }
 }
 
-function printExportPlan(plan: ProjectExportPlan, showDiff: boolean): number {
-  const changed = plan.changes.filter((change) => change.status !== 'unchanged')
+function printExportPlan(plan: ProjectExportPlan, showDiff: boolean): { writeCount: number, deletionCount: number } {
   const created = plan.changes.filter((change) => change.status === 'create').length
   const modified = plan.changes.filter((change) => change.status === 'modify').length
   const unchanged = plan.changes.filter((change) => change.status === 'unchanged').length
@@ -49,7 +48,7 @@ function printExportPlan(plan: ProjectExportPlan, showDiff: boolean): number {
   console.log(`Export plan from ${plan.bundlePath}`)
   printPreview(plan, showDiff)
   console.log(`${created} files to create, ${modified} to overwrite, ${deleted} to delete, ${unchanged} unchanged.`)
-  return changed.length
+  return { writeCount: created + modified, deletionCount: deleted }
 }
 
 function colorize(value: string, color: 'green' | 'red' | 'yellow'): string {
@@ -78,6 +77,14 @@ function printPreview(plan: ProjectExportPlan, showDiff: boolean): void {
     else console.log(`  unchanged ${change.path}`)
   })
 
+  const deletionCount = plan.changes.filter((change) => change.status === 'delete').length
+  if (deletionCount > 0) {
+    const warning = plan.deletion !== false && plan.deletion.autoDelete
+      ? `Warning: ${deletionCount} divergent file${deletionCount === 1 ? '' : 's'} will be deleted during export because deletion.autoDelete is enabled.`
+      : `Warning: ${deletionCount} deletion candidate${deletionCount === 1 ? '' : 's'} detected. They will be preserved unless export runs with --delete.`
+    console.log(`\n${colorize(warning, 'yellow')}`)
+  }
+
   if (!showDiff) return
   plan.changes.forEach((change) => {
     if (!change.diff || change.status === 'delete') return
@@ -86,13 +93,14 @@ function printPreview(plan: ProjectExportPlan, showDiff: boolean): void {
   })
 }
 
-async function confirmExport(): Promise<boolean> {
+async function confirmExport(deletionCount: number): Promise<boolean> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error('Confirmation requires an interactive terminal. Re-run with --yes to apply non-interactively.')
   }
   const prompt = createInterface({ input: process.stdin, output: process.stdout })
   try {
-    const answer = await prompt.question('Apply this export plan and overwrite the listed files? [y/N] ')
+    const deletionMessage = deletionCount > 0 ? ` and delete ${deletionCount} divergent file${deletionCount === 1 ? '' : 's'}` : ''
+    const answer = await prompt.question(`Apply this export plan${deletionMessage}? [y/N] `)
     return /^(y|yes)$/i.test(answer.trim())
   } finally {
     prompt.close()
@@ -151,20 +159,29 @@ function createProgram(): Command {
     .description('regenerate project translation files from a bundle')
     .option('-f, --file <path>', 'input bundle path', 'i18n.bundle.json')
     .option('-y, --yes', 'apply the plan without confirmation')
+    .option('--delete', 'delete divergent files reported by the plan')
     .option('--no-diff', 'hide generated content diffs')
-    .action(async (options: { file: string, yes?: boolean, diff: boolean }, command: Command) => {
+    .action(async (options: { file: string, yes?: boolean, delete?: boolean, diff: boolean }, command: Command) => {
       const plan = await planProjectExport(getProjectOptions(command, options.file))
-      const changeCount = printExportPlan(plan, options.diff)
+      const { writeCount, deletionCount } = printExportPlan(plan, options.diff)
+      const deleteObsolete = plan.deletion !== false
+        && (plan.deletion.autoDelete || options.delete === true)
+      const appliedDeletionCount = deleteObsolete ? deletionCount : 0
+      const changeCount = writeCount + appliedDeletionCount
       if (changeCount === 0) {
+        if (deletionCount > 0) {
+          console.log('No files were changed. Deletion candidates were preserved; re-run with --delete to remove them.')
+          return
+        }
         console.log('The project already matches the bundle.')
         return
       }
-      if (!options.yes && !await confirmExport()) {
+      if (!options.yes && !await confirmExport(appliedDeletionCount)) {
         console.log('Export cancelled. No files were changed.')
         return
       }
-      await applyProjectExport(plan)
-      console.log(`${changeCount} files written.`)
+      await applyProjectExport(plan, { deleteObsolete: options.delete })
+      console.log(`${writeCount} files written, ${appliedDeletionCount} deleted.`)
     })
 
   return program

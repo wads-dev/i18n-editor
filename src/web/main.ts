@@ -5,7 +5,7 @@ import {
   saveStoredProjectConfig,
 } from './bundle-storage.js'
 import { moveKey } from '../core/moveKey.js'
-import { createDefaultProjectConfig, normalizeProjectConfig } from '@wads.dev/i18n-ts/config'
+import { createDefaultEditorProjectConfig, normalizeEditorProjectConfig } from '../core/projectConfig.js'
 import { setStringValue } from '../core/setStringValue.js'
 import { renderExportPreview } from './export-preview.js'
 import { renderLevelImportFields } from './project-settings.js'
@@ -32,6 +32,15 @@ const elements = {
   translationsDirectory: getElement<HTMLInputElement>('#translations-directory'),
   languageFileTemplate: getElement<HTMLInputElement>('#language-file-template'),
   languageReplacer: getElement<HTMLTextAreaElement>('#language-replacer'),
+  useDoubleQuotes: getElement<HTMLInputElement>('#use-double-quotes'),
+  useSemicolons: getElement<HTMLInputElement>('#use-semicolons'),
+  useShorthandProperties: getElement<HTMLInputElement>('#use-shorthand-properties'),
+  useTrailingCommas: getElement<HTMLInputElement>('#use-trailing-commas'),
+  indentationCharacter: getElement<HTMLSelectElement>('#indentation-character'),
+  indentationSize: getElement<HTMLInputElement>('#indentation-size'),
+  deletionEnabled: getElement<HTMLInputElement>('#deletion-enabled'),
+  ignoredDeletionExtensions: getElement<HTMLInputElement>('#ignored-deletion-extensions'),
+  autoDelete: getElement<HTMLInputElement>('#auto-delete'),
   exportPreview: getElement<HTMLElement>('#export-preview'),
   exportPreviewFeedback: getElement<HTMLElement>('#export-preview-feedback'),
   checkExportDiffs: getElement<HTMLButtonElement>('#check-export-diffs'),
@@ -46,7 +55,7 @@ const elements = {
 }
 
 let settingsPanelVisible = false
-let projectConfig = createDefaultProjectConfig()
+let projectConfig = createDefaultEditorProjectConfig()
 let checkedExportChanges: ProjectExportPreviewChange[] | null = null
 let exportPreviewRequestVersion = 0
 
@@ -58,7 +67,7 @@ function invalidateExportPreview() {
   exportPreviewRequestVersion += 1
   checkedExportChanges = null
   elements.exportPreviewFeedback.textContent = ''
-  elements.exportPreviewFeedback.classList.remove('error')
+  elements.exportPreviewFeedback.classList.remove('error', 'warning')
   elements.checkExportDiffs.disabled = !state.getBundle()
   elements.checkExportDiffs.textContent = 'Verificar diffs'
   renderCurrentExportPreview()
@@ -120,13 +129,27 @@ function parseJsonObject(value, fieldName) {
 }
 
 function applyProjectConfig(nextConfig, persist = true, renderLevelImports = true, syncJsonFields = true) {
-  projectConfig = normalizeProjectConfig(nextConfig)
+  projectConfig = normalizeEditorProjectConfig(nextConfig)
   elements.levelCount.value = String(projectConfig.levelCount)
   elements.levelNames.value = projectConfig.levelNames
   elements.translationsDirectory.value = projectConfig.translationsDirectory
   elements.languageFileTemplate.value = projectConfig.languageFileTemplate
+  elements.deletionEnabled.checked = projectConfig.deletion !== false
+  elements.ignoredDeletionExtensions.value = projectConfig.deletion === false
+    ? ''
+    : projectConfig.deletion.ignoredExtensions.join(', ')
+  elements.ignoredDeletionExtensions.disabled = projectConfig.deletion === false
+  elements.autoDelete.checked = projectConfig.deletion !== false && projectConfig.deletion.autoDelete
+  elements.autoDelete.disabled = projectConfig.deletion === false
+  const codeFormat = projectConfig.exportConfig.codeFormat
+  elements.useDoubleQuotes.checked = codeFormat.useDoubleQuotes
+  elements.useSemicolons.checked = codeFormat.useSemicolons
+  elements.useShorthandProperties.checked = codeFormat.useShorthandProperties
+  elements.useTrailingCommas.checked = codeFormat.useTrailingCommas
+  elements.indentationCharacter.value = codeFormat.indentation.character
+  elements.indentationSize.value = String(codeFormat.indentation.size)
   if (syncJsonFields) {
-    elements.importAliases.value = JSON.stringify(projectConfig.importAliases, null, 2)
+    elements.importAliases.value = JSON.stringify(projectConfig.exportConfig.importAliases, null, 2)
     elements.languageReplacer.value = JSON.stringify(projectConfig.languageReplacer, null, 2)
   }
   if (renderLevelImports) {
@@ -185,7 +208,7 @@ elements.checkExportDiffs.addEventListener('click', async () => {
   elements.checkExportDiffs.disabled = true
   elements.checkExportDiffs.textContent = 'Verificando…'
   elements.exportPreviewFeedback.textContent = 'Comparando com os arquivos atuais do projeto…'
-  elements.exportPreviewFeedback.classList.remove('error')
+  elements.exportPreviewFeedback.classList.remove('error', 'warning')
 
   try {
     const result = await checkProjectExport(bundle, projectConfig)
@@ -193,9 +216,18 @@ elements.checkExportDiffs.addEventListener('click', async () => {
     checkedExportChanges = result.changes
     renderCurrentExportPreview()
     const changed = result.changes.filter(({ status }) => status !== 'unchanged').length
-    elements.exportPreviewFeedback.textContent = changed === 0
-      ? 'Os arquivos do projeto já correspondem à prévia.'
-      : `${changed} arquivo${changed === 1 ? '' : 's'} com alterações planejadas.`
+    const deletionCount = result.changes.filter(({ status }) => status === 'delete').length
+    if (deletionCount > 0) {
+      const deletionMessage = projectConfig.deletion !== false && projectConfig.deletion.autoDelete
+        ? `${deletionCount} arquivo${deletionCount === 1 ? '' : 's'} divergente${deletionCount === 1 ? '' : 's'} ${deletionCount === 1 ? 'será excluído' : 'serão excluídos'} durante o export porque autoDelete está ativo.`
+        : `${deletionCount} candidato${deletionCount === 1 ? '' : 's'} à exclusão ${deletionCount === 1 ? 'será preservado' : 'serão preservados'} sem i18n-edit export --delete.`
+      elements.exportPreviewFeedback.textContent = `${changed} arquivo${changed === 1 ? '' : 's'} com alterações planejadas. Atenção: ${deletionMessage}`
+      elements.exportPreviewFeedback.classList.add('warning')
+    } else {
+      elements.exportPreviewFeedback.textContent = changed === 0
+        ? 'Os arquivos do projeto já correspondem à prévia.'
+        : `${changed} arquivo${changed === 1 ? '' : 's'} com alterações planejadas.`
+    }
   } catch (error) {
     if (requestVersion !== exportPreviewRequestVersion) return
     elements.exportPreviewFeedback.textContent = `Não foi possível verificar os diffs: ${error instanceof Error ? error.message : String(error)}`
@@ -233,12 +265,95 @@ elements.languageFileTemplate.addEventListener('input', () => {
 elements.importAliases.addEventListener('input', () => {
   try {
     const importAliases = parseJsonObject(elements.importAliases.value, 'Aliases de import')
-    applyProjectConfig({ ...projectConfig, importAliases }, true, false, false)
+    applyProjectConfig({
+      ...projectConfig,
+      exportConfig: { ...projectConfig.exportConfig, importAliases },
+    }, true, false, false)
     setFeedback('Aliases atualizados.')
   } catch (error) {
     setFeedback(error instanceof Error ? error.message : String(error), true)
   }
 })
+
+elements.useDoubleQuotes.addEventListener('change', () => {
+  applyProjectConfig({
+    ...projectConfig,
+    exportConfig: {
+      ...projectConfig.exportConfig,
+      codeFormat: {
+        ...projectConfig.exportConfig.codeFormat,
+        useDoubleQuotes: elements.useDoubleQuotes.checked,
+      },
+    },
+  })
+  setFeedback(elements.useDoubleQuotes.checked
+    ? 'A exportação usará aspas duplas.'
+    : 'A exportação usará aspas simples.')
+})
+
+elements.useSemicolons.addEventListener('change', () => {
+  applyProjectConfig({
+    ...projectConfig,
+    exportConfig: {
+      ...projectConfig.exportConfig,
+      codeFormat: {
+        ...projectConfig.exportConfig.codeFormat,
+        useSemicolons: elements.useSemicolons.checked,
+      },
+    },
+  })
+  setFeedback(elements.useSemicolons.checked
+    ? 'A exportação usará ponto e vírgula.'
+    : 'A exportação não usará ponto e vírgula.')
+})
+
+elements.useShorthandProperties.addEventListener('change', () => {
+  applyProjectConfig({
+    ...projectConfig,
+    exportConfig: {
+      ...projectConfig.exportConfig,
+      codeFormat: {
+        ...projectConfig.exportConfig.codeFormat,
+        useShorthandProperties: elements.useShorthandProperties.checked,
+      },
+    },
+  })
+  setFeedback('Preferência de propriedades shorthand atualizada.')
+})
+
+elements.useTrailingCommas.addEventListener('change', () => {
+  applyProjectConfig({
+    ...projectConfig,
+    exportConfig: {
+      ...projectConfig.exportConfig,
+      codeFormat: {
+        ...projectConfig.exportConfig.codeFormat,
+        useTrailingCommas: elements.useTrailingCommas.checked,
+      },
+    },
+  })
+  setFeedback('Preferência de vírgula final atualizada.')
+})
+
+function updateIndentation(): void {
+  applyProjectConfig({
+    ...projectConfig,
+    exportConfig: {
+      ...projectConfig.exportConfig,
+      codeFormat: {
+        ...projectConfig.exportConfig.codeFormat,
+        indentation: {
+          character: elements.indentationCharacter.value,
+          size: elements.indentationSize.value,
+        },
+      },
+    },
+  })
+  setFeedback('Indentação da exportação atualizada.')
+}
+
+elements.indentationCharacter.addEventListener('change', updateIndentation)
+elements.indentationSize.addEventListener('input', updateIndentation)
 
 elements.languageReplacer.addEventListener('input', () => {
   try {
@@ -248,6 +363,41 @@ elements.languageReplacer.addEventListener('input', () => {
   } catch (error) {
     setFeedback(error instanceof Error ? error.message : String(error), true)
   }
+})
+
+elements.deletionEnabled.addEventListener('change', () => {
+  applyProjectConfig({
+    ...projectConfig,
+    deletion: elements.deletionEnabled.checked
+      ? { ignoredExtensions: [], autoDelete: false }
+      : false,
+  })
+  setFeedback(elements.deletionEnabled.checked
+    ? 'Detecção de arquivos divergentes ativada.'
+    : 'Detecção e avisos de exclusão desativados.')
+})
+
+elements.ignoredDeletionExtensions.addEventListener('input', () => {
+  if (projectConfig.deletion === false) return
+  applyProjectConfig({
+    ...projectConfig,
+    deletion: {
+      ...projectConfig.deletion,
+      ignoredExtensions: elements.ignoredDeletionExtensions.value.split(','),
+    },
+  })
+  setFeedback('Extensões ignoradas atualizadas.')
+})
+
+elements.autoDelete.addEventListener('change', () => {
+  if (projectConfig.deletion === false) return
+  applyProjectConfig({
+    ...projectConfig,
+    deletion: { ...projectConfig.deletion, autoDelete: elements.autoDelete.checked },
+  })
+  setFeedback(elements.autoDelete.checked
+    ? 'Exclusão automática ativada para o projeto.'
+    : 'Exclusões voltarão a exigir a opção --delete.')
 })
 
 function setProjectStatus(message, isError = false) {

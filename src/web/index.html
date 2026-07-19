@@ -57,14 +57,67 @@
           </label>
         </div>
         <div class="settings-fields output-fields">
-          <label class="level-field level-json-field" for="import-aliases">
-            <span>Aliases de import (JSON)</span>
-            <textarea id="import-aliases" spellcheck="false" placeholder='{ "@/": "src/" }'></textarea>
-          </label>
           <label class="level-field level-json-field" for="language-replacer">
             <span>Replacer dos idiomas (JSON)</span>
             <textarea id="language-replacer" spellcheck="false" placeholder='{ "pt": "ptBR" }'></textarea>
           </label>
+        </div>
+        <div class="export-settings-section">
+          <h3>Exportação</h3>
+          <p>Configure a resolução de caminhos e a formatação dos arquivos TypeScript gerados.</p>
+          <div class="export-settings-fields">
+            <label class="level-field level-json-field" for="import-aliases">
+              <span>Aliases de import (JSON)</span>
+              <textarea id="import-aliases" spellcheck="false" placeholder='{ "@/": "src/" }'></textarea>
+            </label>
+          </div>
+          <div class="code-format-fields">
+            <label class="check-field" for="use-double-quotes">
+              <input id="use-double-quotes" type="checkbox">
+              <span>Usar aspas duplas nas strings geradas</span>
+            </label>
+            <label class="check-field" for="use-semicolons">
+              <input id="use-semicolons" type="checkbox" checked>
+              <span>Usar ponto e vírgula</span>
+            </label>
+            <label class="check-field" for="use-shorthand-properties">
+              <input id="use-shorthand-properties" type="checkbox" checked>
+              <span>Usar propriedades shorthand</span>
+            </label>
+            <label class="check-field" for="use-trailing-commas">
+              <input id="use-trailing-commas" type="checkbox" checked>
+              <span>Usar vírgula no último elemento</span>
+            </label>
+            <label class="level-field" for="indentation-character">
+              <span>Caractere de indentação</span>
+              <select id="indentation-character">
+                <option value="space">Espaço</option>
+                <option value="tab">Tab</option>
+              </select>
+            </label>
+            <label class="level-field" for="indentation-size">
+              <span>Quantidade por nível</span>
+              <input id="indentation-size" type="number" min="1" max="8" step="1" value="2">
+            </label>
+          </div>
+        </div>
+        <div class="deletion-settings-section">
+          <h3>Arquivos divergentes</h3>
+          <p>Arquivos dentro das pastas de tradução que não aparecem no plano são candidatos à exclusão.</p>
+          <div class="deletion-settings-fields">
+            <label class="check-field" for="deletion-enabled">
+              <input id="deletion-enabled" type="checkbox" checked>
+              <span>Detectar e avisar sobre candidatos à exclusão</span>
+            </label>
+            <label class="level-field" for="ignored-deletion-extensions">
+              <span>Extensões ignoradas</span>
+              <input id="ignored-deletion-extensions" type="text" placeholder=".md, .txt">
+            </label>
+            <label class="check-field" for="auto-delete">
+              <input id="auto-delete" type="checkbox">
+              <span>Permitir exclusão sem <code>--delete</code></span>
+            </label>
+          </div>
         </div>
       </section>
 

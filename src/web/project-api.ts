@@ -1,6 +1,6 @@
 import { assertBundle } from '@wads.dev/i18n-ts/bundle'
-import { normalizeProjectConfig } from '@wads.dev/i18n-ts/config'
 
+import { normalizeEditorProjectConfig } from '../core/projectConfig.js'
 import type {
   ApiError,
   GenerateBundleResult,
@@ -20,7 +20,7 @@ export async function getProjectInfo(): Promise<ProjectInfo> {
   const info = await readResponse<ProjectInfo>(await fetch('/api/project', { cache: 'no-store' }))
   return {
     ...info,
-    config: info.config ? normalizeProjectConfig(info.config) : null,
+    config: info.config ? normalizeEditorProjectConfig(info.config) : null,
     bundle: info.bundle ? assertBundle(info.bundle) : null,
   }
 }

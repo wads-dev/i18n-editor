@@ -1,10 +1,10 @@
 import { renderTranslationTables } from './table.js'
-import { createDefaultProjectConfig } from '@wads.dev/i18n-ts/config'
+import { createDefaultEditorProjectConfig } from '../core/projectConfig.js'
 
 export function createEditorView({ emptyState, tableWrap, tableContainer, summary, search, onMoveKey, onEditValue }) {
   let currentRows = []
   let currentBundle = null
-  let projectConfig = createDefaultProjectConfig()
+  let projectConfig = createDefaultEditorProjectConfig()
 
   search.addEventListener('input', () => {
     const query = search.value.trim().toLocaleLowerCase()

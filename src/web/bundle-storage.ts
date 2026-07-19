@@ -1,5 +1,5 @@
 import { assertBundle, type I18nBundle } from '@wads.dev/i18n-ts/bundle'
-import type { I18nProjectConfig } from '@wads.dev/i18n-ts/config'
+import type { EditorProjectConfig } from '../core/projectConfig.js'
 
 const DATABASE_NAME = 'wads-i18n-editor'
 const DATABASE_VERSION = 1
@@ -9,7 +9,7 @@ const PROJECT_CONFIG_KEY = 'project-config'
 const LEGACY_VISUALIZATION_CONFIG_KEY = 'visualization-config'
 
 type StoredBundleRecord = { id: string; bundle: I18nBundle }
-type StoredConfigRecord = { id: string; config: I18nProjectConfig }
+type StoredConfigRecord = { id: string; config: EditorProjectConfig }
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -64,7 +64,7 @@ export async function saveStoredBundle(bundle: I18nBundle): Promise<void> {
   }
 }
 
-export async function loadStoredProjectConfig(): Promise<I18nProjectConfig | null> {
+export async function loadStoredProjectConfig(): Promise<EditorProjectConfig | null> {
   const database = await openDatabase()
   try {
     const transaction = database.transaction(STORE_NAME, 'readonly')
@@ -80,7 +80,7 @@ export async function loadStoredProjectConfig(): Promise<I18nProjectConfig | nul
   }
 }
 
-export async function saveStoredProjectConfig(config: I18nProjectConfig): Promise<void> {
+export async function saveStoredProjectConfig(config: EditorProjectConfig): Promise<void> {
   const database = await openDatabase()
   try {
     const transaction = database.transaction(STORE_NAME, 'readwrite')

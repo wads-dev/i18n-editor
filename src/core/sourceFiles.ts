@@ -1,7 +1,11 @@
 import { assertBundle, type BundleValue, type I18nBundle } from '@wads.dev/i18n-ts/bundle'
-import { normalizeProjectConfig, type I18nProjectConfig } from '@wads.dev/i18n-ts/config'
 
 import { buildTranslationOwners, type TranslationOwner } from './exportPlan.js'
+import {
+  normalizeEditorProjectConfig,
+  type EditorProjectConfig,
+  type I18nCodeFormatConfig,
+} from './projectConfig.js'
 
 export type GeneratedSourceFile = {
   kind: 'base' | 'index' | 'language'
@@ -74,8 +78,43 @@ function toIdentifier(value: string): string {
   return /^[$A-Z_a-z]/.test(identifier) ? identifier : `_${identifier}`
 }
 
-function propertyName(value: string): string {
-  return /^[$A-Z_a-z][$\w]*$/.test(value) ? value : JSON.stringify(value)
+function quoteString(value: string, codeFormat: I18nCodeFormatConfig): string {
+  if (codeFormat.useDoubleQuotes) return JSON.stringify(value)
+  const escaped = [...value].map((character) => {
+    if (character === "'") return "\\'"
+    if (character === '\\') return '\\\\'
+    if (character === '\n') return '\\n'
+    if (character === '\r') return '\\r'
+    if (character === '\t') return '\\t'
+    if (character === '\b') return '\\b'
+    if (character === '\f') return '\\f'
+    const codePoint = character.codePointAt(0)!
+    if (codePoint < 0x20 || codePoint === 0x2028 || codePoint === 0x2029) {
+      return `\\u${codePoint.toString(16).padStart(4, '0')}`
+    }
+    return character
+  }).join('')
+  return `'${escaped}'`
+}
+
+function propertyName(value: string, codeFormat: I18nCodeFormatConfig): string {
+  return /^[$A-Z_a-z][$\w]*$/.test(value) ? value : quoteString(value, codeFormat)
+}
+
+function indent(level: number, codeFormat: I18nCodeFormatConfig): string {
+  const character = codeFormat.indentation.character === 'tab' ? '\t' : ' '
+  return character.repeat(codeFormat.indentation.size * level)
+}
+
+function terminateStatement(value: string, codeFormat: I18nCodeFormatConfig): string {
+  return `${value}${codeFormat.useSemicolons ? ';' : ''}`
+}
+
+function addCommas(values: string[], codeFormat: I18nCodeFormatConfig): string[] {
+  return values.map((value, index) => {
+    const needsComma = index < values.length - 1 || codeFormat.useTrailingCommas
+    return `${value}${needsComma ? ',' : ''}`
+  })
 }
 
 function getTypeName(owner: TranslationOwner, basePath: string, names: Record<string, string>): string {
@@ -99,43 +138,59 @@ function getFunctionType(source: string): string {
 
 function renderType(
   value: SourceNode,
-  indentation: number,
+  level: number,
   keyPath: string,
   existingPropertyTypes: Record<string, string>,
+  codeFormat: I18nCodeFormatConfig,
 ): string {
   if (isTypeReference(value)) return value.$reference
   if (existingPropertyTypes[keyPath]) return existingPropertyTypes[keyPath]
   if (isFunctionDescriptor(value)) return getFunctionType(value.source)
   if (Array.isArray(value)) {
     if (value.length === 0) return 'unknown[]'
-    const types = [...new Set(value.map((item) => renderType(item, indentation, keyPath, existingPropertyTypes)))]
+    const types = [...new Set(value.map((item) => renderType(item, level, keyPath, existingPropertyTypes, codeFormat)))]
     return types.length === 1 ? `${types[0]}[]` : `Array<${types.join(' | ')}>`
   }
   if (isRecord(value)) {
     const entries = Object.entries(value)
     if (entries.length === 0) return 'Record<string, never>'
-    const pad = ' '.repeat(indentation)
-    const childPad = ' '.repeat(indentation + 2)
+    const pad = indent(level, codeFormat)
+    const childPad = indent(level + 1, codeFormat)
     return `{\n${entries.map(([key, item]) => {
       const childPath = keyPath ? `${keyPath}.${key}` : key
-      return `${childPad}${propertyName(key)}: ${renderType(item as SourceNode, indentation + 2, childPath, existingPropertyTypes)};`
+      const member = `${childPad}${propertyName(key, codeFormat)}: ${renderType(item as SourceNode, level + 1, childPath, existingPropertyTypes, codeFormat)}`
+      return terminateStatement(member, codeFormat)
     }).join('\n')}\n${pad}}`
   }
   if (value === null) return 'null'
   return typeof value
 }
 
-function renderValue(value: SourceNode, indentation: number): string {
+function renderValue(value: SourceNode, level: number, codeFormat: I18nCodeFormatConfig): string {
   if (isTypeReference(value)) return value.$value
   if (isFunctionDescriptor(value)) return value.source
-  if (Array.isArray(value)) return JSON.stringify(value, null, 2).replaceAll('\n', `\n${' '.repeat(indentation)}`)
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]'
+    const pad = indent(level, codeFormat)
+    const childPad = indent(level + 1, codeFormat)
+    const items = value.map((item) => `${childPad}${renderValue(item, level + 1, codeFormat)}`)
+    return `[\n${addCommas(items, codeFormat).join('\n')}\n${pad}]`
+  }
   if (isRecord(value)) {
     const entries = Object.entries(value)
     if (entries.length === 0) return '{}'
-    const pad = ' '.repeat(indentation)
-    const childPad = ' '.repeat(indentation + 2)
-    return `{\n${entries.map(([key, item]) => `${childPad}${propertyName(key)}: ${renderValue(item as SourceNode, indentation + 2)},`).join('\n')}\n${pad}}`
+    const pad = indent(level, codeFormat)
+    const childPad = indent(level + 1, codeFormat)
+    const properties = entries.map(([key, item]) => {
+      const renderedValue = renderValue(item as SourceNode, level + 1, codeFormat)
+      const canUseShorthand = codeFormat.useShorthandProperties
+        && /^[$A-Z_a-z][$\w]*$/.test(key)
+        && renderedValue === key
+      return `${childPad}${canUseShorthand ? key : `${propertyName(key, codeFormat)}: ${renderedValue}`}`
+    })
+    return `{\n${addCommas(properties, codeFormat).join('\n')}\n${pad}}`
   }
+  if (typeof value === 'string') return quoteString(value, codeFormat)
   return JSON.stringify(value)
 }
 
@@ -156,15 +211,17 @@ function renderBaseFile(
   tree: ObjectNode,
   imports: Array<{ name: string; path: string }>,
   existingPropertyTypes: Record<string, string>,
+  codeFormat: I18nCodeFormatConfig,
 ): string {
   const importLines = [
-    "import type { Translation } from '@wads.dev/i18n-ts'",
-    ...imports.map((item) => `import type ${item.name} from '${item.path}'`),
-  ]
+    `import type { Translation } from ${quoteString('@wads.dev/i18n-ts', codeFormat)}`,
+    ...imports.map((item) => `import type ${item.name} from ${quoteString(item.path, codeFormat)}`),
+  ].map((line) => terminateStatement(line, codeFormat))
   const body = Object.entries(tree)
     .map(([key, value]) => {
       const keyPath = ownerKeyPath ? `${ownerKeyPath}.${key}` : key
-      return `  ${propertyName(key)}: ${renderType(value, 2, keyPath, existingPropertyTypes)};`
+      const member = `${indent(1, codeFormat)}${propertyName(key, codeFormat)}: ${renderType(value, 1, keyPath, existingPropertyTypes, codeFormat)}`
+      return terminateStatement(member, codeFormat)
     })
     .join('\n')
   return `${importLines.join('\n')}\n\nexport default interface ${typeName} extends Translation {\n${body}\n}\n`
@@ -175,40 +232,59 @@ function renderLanguageFile(
   typeName: string,
   tree: ObjectNode,
   imports: Array<{ name: string; path: string }>,
+  codeFormat: I18nCodeFormatConfig,
 ): string {
   const importLines = [
-    ...imports.map((item) => `import ${item.name} from '${item.path}'`),
-    `import type ${typeName} from './base'`,
-  ]
-  return `${importLines.join('\n')}\n\nconst ${variableName}: ${typeName} = ${renderValue(tree, 0)}\n\nexport default ${variableName}\n`
+    ...imports.map((item) => `import ${item.name} from ${quoteString(item.path, codeFormat)}`),
+    `import type ${typeName} from ${quoteString('./base', codeFormat)}`,
+  ].map((line) => terminateStatement(line, codeFormat))
+  const declaration = terminateStatement(`const ${variableName}: ${typeName} = ${renderValue(tree, 0, codeFormat)}`, codeFormat)
+  const exportLine = terminateStatement(`export default ${variableName}`, codeFormat)
+  return `${importLines.join('\n')}\n\n${declaration}\n\n${exportLine}\n`
 }
 
 function renderIndexFile(
   bundle: I18nBundle,
   rootTypeName: string,
   languageTypeName: string,
-  config: I18nProjectConfig,
+  config: EditorProjectConfig,
   indexPath: string,
   rootBasePath: string,
 ): string {
   const languageKeys = Object.keys(bundle.languages)
-  const languageUnion = languageKeys.map((key) => JSON.stringify(key)).join(' | ') || 'never'
+  const codeFormat = config.exportConfig.codeFormat
+  const languageUnion = languageKeys.map((key) => quoteString(key, codeFormat)).join(' | ') || 'never'
   const entries = languageKeys.map((languageKey) => {
     const language = bundle.languages[languageKey]!
     const filename = config.languageReplacer[languageKey] || languageKey
     const languagePath = `${rootBasePath.slice(0, -'base.ts'.length)}${config.languageFileTemplate.replaceAll('{language}', filename)}`
-    return `  ${propertyName(languageKey)}: {\n    lang: () => import('${relativeImport(indexPath, languagePath)}'),\n    name: ${JSON.stringify(language.name)},\n    short: ${JSON.stringify(language.short)},\n    locale: ${JSON.stringify(language.locale)},\n  },`
+    const properties = addCommas([
+      `${indent(2, codeFormat)}lang: () => import(${quoteString(relativeImport(indexPath, languagePath), codeFormat)})`,
+      `${indent(2, codeFormat)}name: ${quoteString(language.name, codeFormat)}`,
+      `${indent(2, codeFormat)}short: ${quoteString(language.short, codeFormat)}`,
+      `${indent(2, codeFormat)}locale: ${quoteString(language.locale, codeFormat)}`,
+    ], codeFormat)
+    return `${indent(1, codeFormat)}${propertyName(languageKey, codeFormat)}: {\n${properties.join('\n')}\n${indent(1, codeFormat)}}`
   })
-  return `import type { AvailableLangs } from '@wads.dev/i18n-ts'\nimport type ${rootTypeName} from '${relativeImport(indexPath, rootBasePath)}'\n\nexport type ${languageTypeName} = ${languageUnion}\n\nexport const Langs: AvailableLangs<${languageTypeName}, ${rootTypeName}> = {\n${entries.join('\n')}\n}\n`
+  const imports = [
+    terminateStatement(`import type { AvailableLangs } from ${quoteString('@wads.dev/i18n-ts', codeFormat)}`, codeFormat),
+    terminateStatement(`import type ${rootTypeName} from ${quoteString(relativeImport(indexPath, rootBasePath), codeFormat)}`, codeFormat),
+  ]
+  const typeDeclaration = terminateStatement(`export type ${languageTypeName} = ${languageUnion}`, codeFormat)
+  const langsDeclaration = terminateStatement(
+    `export const Langs: AvailableLangs<${languageTypeName}, ${rootTypeName}> = {\n${addCommas(entries, codeFormat).join('\n')}\n}`,
+    codeFormat,
+  )
+  return `${imports.join('\n')}\n\n${typeDeclaration}\n\n${langsDeclaration}\n`
 }
 
 export function generateSourceFiles(
   bundle: I18nBundle,
-  projectConfig: I18nProjectConfig,
+  projectConfig: EditorProjectConfig,
   options: SourceGenerationOptions = {},
 ): GeneratedSourceFile[] {
   const validBundle = assertBundle(bundle)
-  const config = normalizeProjectConfig(projectConfig)
+  const config = normalizeEditorProjectConfig(projectConfig)
   const owners = buildTranslationOwners(validBundle, config)
   const ownerByKey = new Map(owners.map((owner) => [owner.keyPath, owner]))
   const typeNames = new Map<string, string>()
@@ -265,6 +341,7 @@ export function generateSourceFiles(
         referenceTree,
         baseImports,
         options.existingPropertyTypes || {},
+        config.exportConfig.codeFormat,
       ),
     })
 
@@ -287,7 +364,13 @@ export function generateSourceFiles(
       files.push({
         kind: 'language',
         path: languagePath,
-        content: renderLanguageFile(toIdentifier(filenameValue), typeName, tree, languageImports),
+        content: renderLanguageFile(
+          toIdentifier(filenameValue),
+          typeName,
+          tree,
+          languageImports,
+          config.exportConfig.codeFormat,
+        ),
       })
     })
   })

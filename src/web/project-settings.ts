@@ -1,4 +1,5 @@
-import { getDefaultLevelImport, getLevelName } from '@wads.dev/i18n-ts/config'
+import { getDefaultLevelImport } from '@wads.dev/i18n-ts/config'
+import { getEditorLevelName } from '../core/projectConfig.js'
 
 function createJsonField(document, { labelText, value, placeholder, onInput }) {
   const label = document.createElement('label')
@@ -27,7 +28,7 @@ export function renderLevelImportFields(container, config, onChange) {
     card.className = 'level-import-card'
 
     const heading = document.createElement('h4')
-    heading.textContent = index === 0 ? 'Root (nível 0)' : `${getLevelName(config, index)} (nível ${index})`
+    heading.textContent = index === 0 ? 'Root (nível 0)' : `${getEditorLevelName(config, index)} (nível ${index})`
 
     const pathLabel = document.createElement('label')
     pathLabel.className = 'level-field level-path-field'

@@ -2,9 +2,10 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import ts from 'typescript'
 import type { I18nBundle } from '@wads.dev/i18n-ts/bundle'
-import { resolveImportAlias, type I18nProjectConfig } from '@wads.dev/i18n-ts/config'
+import { resolveImportAlias } from '@wads.dev/i18n-ts/config'
 import { createTwoFilesPatch } from 'diff'
 
+import type { EditorProjectConfig, I18nDeletionConfig } from '../core/projectConfig.js'
 import { buildExportPlan, buildTranslationOwners } from '../core/exportPlan.js'
 import { generateSourceFiles, type GeneratedSourceFile } from '../core/sourceFiles.js'
 import { createProjectContext, type ProjectContextOptions } from './projectContext.js'
@@ -23,11 +24,12 @@ export type ProjectExportPlan = {
   bundlePath: string
   changes: ProjectExportChange[]
   managedDirectories: string[]
+  deletion: false | I18nDeletionConfig
 }
 
 export type ProjectExportState = {
   bundle: I18nBundle
-  config: I18nProjectConfig
+  config: EditorProjectConfig
 }
 
 async function readOptionalFile(filePath: string): Promise<string | null> {
@@ -100,13 +102,13 @@ function normalizeProjectPath(filePath: string): string {
 function resolveTypeImportPath(
   baseFilePath: string,
   importPath: string,
-  config: I18nProjectConfig,
+  config: EditorProjectConfig,
 ): string | null {
   let resolved: string
   if (importPath.startsWith('.')) {
     resolved = path.posix.normalize(path.posix.join(path.posix.dirname(baseFilePath), importPath))
   } else {
-    resolved = resolveImportAlias(importPath, config.importAliases)
+    resolved = resolveImportAlias(importPath, config.exportConfig.importAliases)
     if (resolved === importPath) return null
   }
   return /\.[cm]?[jt]sx?$/.test(resolved) ? resolved : `${resolved}.ts`
@@ -114,6 +116,10 @@ function resolveTypeImportPath(
 
 function isInsideDirectory(filePath: string, directory: string): boolean {
   return filePath === directory || filePath.startsWith(`${directory}/`)
+}
+
+function isIgnoredDeletionFile(filePath: string, deletion: I18nDeletionConfig): boolean {
+  return deletion.ignoredExtensions.includes(path.extname(filePath).toLowerCase())
 }
 
 async function listManagedFiles(directory: string): Promise<string[]> {
@@ -211,7 +217,7 @@ export async function planProjectExport(
 
   const catalogFile = info.catalogPath
     ? path.relative(projectDirectory, info.catalogPath).replaceAll(path.sep, '/')
-    : (config as I18nProjectConfig & { catalogFile?: string }).catalogFile
+    : config.catalogFile
   const existingCatalog = catalogFile
     ? await readOptionalFile(assertInsideProject(projectDirectory, catalogFile))
     : null
@@ -246,9 +252,12 @@ export async function planProjectExport(
   }))
 
   const generatedAbsolutePaths = new Set(generatedChanges.map((change) => change.absolutePath))
-  const existingManagedFiles = (await Promise.all(managedDirectories.map(listManagedFiles))).flat()
+  const existingManagedFiles = config.deletion === false
+    ? []
+    : (await Promise.all(managedDirectories.map(listManagedFiles))).flat()
   const deletedChanges: ProjectExportChange[] = [...new Set(existingManagedFiles)]
     .filter((filePath) => !generatedAbsolutePaths.has(filePath))
+    .filter((filePath) => config.deletion !== false && !isIgnoredDeletionFile(filePath, config.deletion))
     .map((absolutePath) => ({
       kind: 'obsolete',
       path: normalizeProjectPath(path.relative(projectDirectory, absolutePath)),
@@ -258,10 +267,13 @@ export async function planProjectExport(
 
   const changes = [...generatedChanges, ...deletedChanges]
     .sort((left, right) => left.path.localeCompare(right.path))
-  return { projectDirectory, bundlePath: info.bundlePath, changes, managedDirectories }
+  return { projectDirectory, bundlePath: info.bundlePath, changes, managedDirectories, deletion: config.deletion }
 }
 
-export async function applyProjectExport(plan: ProjectExportPlan): Promise<void> {
+export async function applyProjectExport(
+  plan: ProjectExportPlan,
+  options: { deleteObsolete?: boolean } = {},
+): Promise<void> {
   for (const change of plan.changes.filter((item) => item.status !== 'delete')) {
     if (change.status === 'unchanged' || change.content === undefined) continue
     await fs.mkdir(path.dirname(change.absolutePath), { recursive: true })
@@ -274,8 +286,12 @@ export async function applyProjectExport(plan: ProjectExportPlan): Promise<void>
       throw error
     }
   }
-  for (const change of plan.changes.filter((item) => item.status === 'delete')) {
-    await fs.rm(change.absolutePath, { force: true, recursive: true })
+  const shouldDelete = plan.deletion !== false
+    && (plan.deletion.autoDelete || options.deleteObsolete === true)
+  if (shouldDelete) {
+    for (const change of plan.changes.filter((item) => item.status === 'delete')) {
+      await fs.rm(change.absolutePath, { force: true, recursive: true })
+    }
+    await Promise.all(plan.managedDirectories.map(removeEmptyDescendants))
   }
-  await Promise.all(plan.managedDirectories.map(removeEmptyDescendants))
 }

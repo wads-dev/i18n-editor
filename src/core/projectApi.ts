@@ -1,12 +1,12 @@
 import type { I18nBundle } from '@wads.dev/i18n-ts/bundle'
-import type { I18nProjectConfig } from '@wads.dev/i18n-ts/config'
+import type { EditorProjectConfig } from './projectConfig.js'
 
 export type ProjectInfo = {
   projectDirectory: string
   configPath: string | null
   catalogPath: string | null
   bundlePath: string
-  config: I18nProjectConfig | null
+  config: EditorProjectConfig | null
   bundle: I18nBundle | null
   canGenerateBundle: boolean
 }
@@ -18,7 +18,7 @@ export type GenerateBundleResult = {
 
 export type ProjectExportPreviewRequest = {
   bundle: I18nBundle
-  config: I18nProjectConfig
+  config: EditorProjectConfig
 }
 
 export type ProjectExportPreviewChange = {

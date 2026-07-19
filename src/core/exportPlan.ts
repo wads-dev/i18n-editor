@@ -1,12 +1,11 @@
 import { assertBundle, type I18nBundle } from '@wads.dev/i18n-ts/bundle'
 import {
   flattenPathReplacer,
-  getLevelImport,
-  normalizeProjectConfig,
+  getDefaultLevelImport,
   resolveImportAlias,
   type I18nPathReplacer,
-  type I18nProjectConfig,
 } from '@wads.dev/i18n-ts/config'
+import { normalizeEditorProjectConfig, type EditorProjectConfig } from './projectConfig.js'
 
 export type ExportPlanFile = {
   kind: 'base' | 'index' | 'language'
@@ -22,6 +21,10 @@ export type TranslationOwner = {
 type ReplacementResult =
   | { found: false; value: undefined }
   | { found: true; value: string | null }
+
+function getConfiguredLevelImport(config: EditorProjectConfig, level: number) {
+  return config.levelImports[level] || getDefaultLevelImport(level)
+}
 
 function appendPath(basePath: string, nextPath: string): string {
   return [basePath, nextPath]
@@ -51,23 +54,23 @@ function getReplacement(
   return { found: false, value: undefined }
 }
 
-export function getTranslationOwnerChain(fullKey: string, config: I18nProjectConfig): TranslationOwner[] {
+export function getTranslationOwnerChain(fullKey: string, config: EditorProjectConfig): TranslationOwner[] {
   const segments = fullKey.split('.')
   const groupCount = Math.min(config.levelCount, Math.max(segments.length - 1, 0))
-  const rootImport = getLevelImport(config, 0)
-  let directory = resolveImportAlias(expandTemplate(rootImport.path, ''), config.importAliases)
+  const rootImport = getConfiguredLevelImport(config, 0)
+  let directory = resolveImportAlias(expandTemplate(rootImport.path, ''), config.exportConfig.importAliases)
   let consumedSegments = 0
   const owners: TranslationOwner[] = [{ directory, keyPath: '' }]
 
   for (let level = 1; level <= groupCount; level += 1) {
     const segment = segments[level - 1]!
     const objectPath = segments.slice(0, level).join('.')
-    const levelImport = getLevelImport(config, level)
+    const levelImport = getConfiguredLevelImport(config, level)
     const fullReplacement = getReplacement(levelImport.fullReplacer, objectPath, segment)
 
     if (fullReplacement.found) {
       if (fullReplacement.value !== null) {
-        directory = resolveImportAlias(fullReplacement.value, config.importAliases)
+        directory = resolveImportAlias(fullReplacement.value, config.exportConfig.importAliases)
         consumedSegments = level
         owners.push({ directory, keyPath: objectPath })
       }
@@ -77,8 +80,8 @@ export function getTranslationOwnerChain(fullKey: string, config: I18nProjectCon
     const valueReplacement = getReplacement(levelImport.valueReplacer, objectPath, segment)
     const value = typeof valueReplacement.value === 'string' ? valueReplacement.value : segment
     const template = expandTemplate(levelImport.path, value)
-    const resolved = resolveImportAlias(template, config.importAliases)
-    directory = hasAlias(template, config.importAliases) || template.startsWith('/')
+    const resolved = resolveImportAlias(template, config.exportConfig.importAliases)
+    directory = hasAlias(template, config.exportConfig.importAliases) || template.startsWith('/')
       ? resolved
       : appendPath(directory, resolved)
     consumedSegments = level
@@ -89,7 +92,7 @@ export function getTranslationOwnerChain(fullKey: string, config: I18nProjectCon
   return owners
 }
 
-export function getTranslationOwner(fullKey: string, config: I18nProjectConfig): TranslationOwner {
+export function getTranslationOwner(fullKey: string, config: EditorProjectConfig): TranslationOwner {
   return getTranslationOwnerChain(fullKey, config).at(-1)!
 }
 
@@ -122,10 +125,10 @@ function collectTranslationKeys(value: unknown, path = '', keys: string[] = []):
 
 export function buildTranslationOwners(
   bundle: I18nBundle,
-  config: I18nProjectConfig,
+  config: EditorProjectConfig,
 ): TranslationOwner[] {
   const validBundle = assertBundle(bundle)
-  const validConfig = normalizeProjectConfig(config)
+  const validConfig = normalizeEditorProjectConfig(config)
   const owners = new Map<string, TranslationOwner>()
   const referenceLanguage = Object.values(validBundle.languages)[0]
 
@@ -146,10 +149,10 @@ export function buildTranslationOwners(
 
 export function buildExportPlan(
   bundle: I18nBundle,
-  config: I18nProjectConfig,
+  config: EditorProjectConfig,
 ): ExportPlanFile[] {
   const validBundle = assertBundle(bundle)
-  const validConfig = normalizeProjectConfig(config)
+  const validConfig = normalizeEditorProjectConfig(config)
   const owners = buildTranslationOwners(validBundle, validConfig)
 
   return owners
@@ -161,7 +164,7 @@ export function buildExportPlan(
       if (keyPath === '') {
         structuralFiles.push({
           kind: 'index',
-          path: (validConfig as I18nProjectConfig & { catalogFile?: string }).catalogFile
+          path: validConfig.catalogFile
             || appendPath(translationsDirectory, 'index.ts'),
         })
       }

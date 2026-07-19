@@ -1,6 +1,5 @@
-import { getLevelName } from '@wads.dev/i18n-ts/config'
 import type { I18nBundle } from '@wads.dev/i18n-ts/bundle'
-import type { I18nProjectConfig } from '@wads.dev/i18n-ts/config'
+import { getEditorLevelName, type EditorProjectConfig } from '../core/projectConfig.js'
 
 function isFunctionDescriptor(value) {
   return value && typeof value === 'object' && value.$type === 'function'
@@ -216,7 +215,7 @@ function appendTableGroup(document, container, node, languages, callbacks, isRoo
     details.className = 'translation-group'
     const summary = document.createElement('summary')
     const label = document.createElement('span')
-    label.textContent = `${getLevelName(callbacks.projectConfig, node.depth)} · ${node.name}`
+    label.textContent = `${getEditorLevelName(callbacks.projectConfig, node.depth)} · ${node.name}`
     const count = document.createElement('span')
     count.className = 'group-count'
     count.textContent = `${getNodeRowCount(node)} chaves`
@@ -248,7 +247,7 @@ function appendTableGroup(document, container, node, languages, callbacks, isRoo
 }
 
 type RenderTranslationOptions = {
-  projectConfig: I18nProjectConfig
+  projectConfig: EditorProjectConfig
   onMoveKey?: (sourceKey: string) => void
   onEditValue?: (change: { languageKey: string; key: string; value: string }) => boolean
 }

@@ -1,6 +1,5 @@
 import fastifyStatic from '@fastify/static'
 import { assertBundle } from '@wads.dev/i18n-ts/bundle'
-import { normalizeProjectConfig } from '@wads.dev/i18n-ts/config'
 import Fastify, { type FastifyInstance } from 'fastify'
 import { fileURLToPath } from 'node:url'
 
@@ -11,6 +10,7 @@ import type {
   ProjectExportPreviewResult,
   ProjectInfo,
 } from '../core/projectApi.js'
+import { normalizeEditorProjectConfig } from '../core/projectConfig.js'
 import { planProjectExport } from './exportProject.js'
 import { createProjectContext, type ProjectContextOptions } from './projectContext.js'
 
@@ -42,7 +42,7 @@ export async function createServer(options: ProjectContextOptions = {}): Promise
     try {
       const plan = await planProjectExport(options, {
         bundle: assertBundle(request.body?.bundle),
-        config: normalizeProjectConfig(request.body?.config),
+        config: normalizeEditorProjectConfig(request.body?.config),
       })
       return {
         changes: plan.changes.map(({ kind, path, status, diff }) => ({ kind, path, status, diff })),

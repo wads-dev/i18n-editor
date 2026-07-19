@@ -5,12 +5,11 @@ import { fileURLToPath } from 'node:url'
 
 import { parseBundle } from '@wads.dev/i18n-ts/bundle'
 import {
-  normalizeProjectConfig,
   PROJECT_CONFIG_FORMAT,
   PROJECT_CONFIG_VERSION,
-  type I18nProjectConfig,
 } from '@wads.dev/i18n-ts/config'
 
+import { normalizeEditorProjectConfig, type EditorProjectConfig } from '../core/projectConfig.js'
 import type { GenerateBundleResult, ProjectInfo } from '../core/projectApi.js'
 
 export type ProjectContextOptions = {
@@ -20,7 +19,7 @@ export type ProjectContextOptions = {
   bundleFile?: string
 }
 
-type ProjectConfigWithCatalog = I18nProjectConfig & { catalogFile: string }
+type ProjectConfigWithCatalog = EditorProjectConfig & { catalogFile: string }
 
 const DEFAULT_CATALOG_CANDIDATES = [
   'src/shared/i18n/index.ts',
@@ -49,7 +48,7 @@ async function readConfig(configPath: string): Promise<ProjectConfigWithCatalog 
     throw new Error(`Invalid project configuration. Expected ${PROJECT_CONFIG_FORMAT} version ${PROJECT_CONFIG_VERSION}.`)
   }
 
-  const config = normalizeProjectConfig(raw)
+  const config = normalizeEditorProjectConfig(raw)
   const catalogFile = typeof raw.catalogFile === 'string' && raw.catalogFile.trim()
     ? raw.catalogFile.trim()
     : 'src/shared/i18n/index.ts'
