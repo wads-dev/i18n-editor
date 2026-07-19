@@ -7,7 +7,7 @@ The Editor is a local Node.js application with a browser interface. The publishe
 - `src/core/` contains environment-neutral editing and export-plan operations. It is strict TypeScript and may be consumed by the browser or future server routes.
 - `src/web/` contains the browser interface. It is bundled into `dist/public/editor.js`.
 - `src/server/` owns the local Fastify server. It must bind to loopback by default.
-- `src/cli/` owns argument parsing and process lifecycle. Its emitted entry point is the package executable.
+- `src/cli/` owns process lifecycle and declares commands and options through Commander. Commander owns parsing, validation and generated help. The emitted entry point is the package executable.
 - `scripts/` contains deterministic build support only.
 
 ## Build output
@@ -22,7 +22,21 @@ The Editor is a local Node.js application with a browser interface. The publishe
 - The CLI fixes the project root, configuration, catalog and bundle paths at startup. Browser requests cannot choose filesystem paths.
 - `GET /api/project` reads the current project configuration and bundle and reports whether a catalog is available for generation.
 - `POST /api/bundle` runs the `@wads.dev/i18n-ts` bundler for the fixed catalog and writes only the configured bundle file.
+- `POST /api/export-preview` compares the browser's in-memory bundle and configuration with the fixed project filesystem. It is read-only and returns relative paths, statuses and unified diffs, never generated contents or absolute paths.
 - Concurrent generation requests share one in-flight operation.
-- Translation source files remain read-only. Applying edited bundles back to source files requires a separate safety contract.
+- HTTP routes keep translation source files read-only. Source regeneration is an explicit CLI operation with the safety contract below.
 
 The default project is the process working directory. CLI arguments override discovery, followed by `catalogFile` from `i18n.config.json`, then conventional catalog paths.
+
+`i18n-edit preview` is the read-only CLI representation of the Web Editor export preview. Both originate from the same environment-neutral `buildExportPlan` operation; the server enriches that plan with filesystem states, obsolete files and unified diffs. The CLI displays diffs by default and accepts `--no-diff`; the browser requests them only through its explicit verification action.
+
+## Source export safety
+
+- `i18n-edit export` is the only source-writing entry point in this increment; the browser cannot invoke it.
+- The complete plan is calculated before writing and classifies files as created, modified or unchanged.
+- Interactive use requires explicit confirmation. `--yes` is the opt-in non-interactive mode.
+- Every destination is validated to remain inside the selected project root.
+- Changed files are written through a sibling temporary file and atomically renamed.
+- A configured `i18n` directory is fully managed: files absent from the generated plan are marked for deletion.
+- Files outside managed `i18n` directories are never deleted.
+- Existing interface names, leaf property types and required type imports are preserved when available. This retains public type names, literal unions and function signatures during round-trips.

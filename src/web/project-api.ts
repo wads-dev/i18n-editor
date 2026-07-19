@@ -1,7 +1,12 @@
 import { assertBundle } from '@wads.dev/i18n-ts/bundle'
 import { normalizeProjectConfig } from '@wads.dev/i18n-ts/config'
 
-import type { ApiError, GenerateBundleResult, ProjectInfo } from '../core/projectApi.js'
+import type {
+  ApiError,
+  GenerateBundleResult,
+  ProjectExportPreviewResult,
+  ProjectInfo,
+} from '../core/projectApi.js'
 
 async function readResponse<T>(response: Response): Promise<T> {
   const value = await response.json() as T | ApiError
@@ -23,4 +28,12 @@ export async function getProjectInfo(): Promise<ProjectInfo> {
 export async function generateProjectBundle(): Promise<GenerateBundleResult> {
   const result = await readResponse<GenerateBundleResult>(await fetch('/api/bundle', { method: 'POST' }))
   return { ...result, bundle: assertBundle(result.bundle) }
+}
+
+export async function checkProjectExport(bundle, config): Promise<ProjectExportPreviewResult> {
+  return readResponse<ProjectExportPreviewResult>(await fetch('/api/export-preview', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bundle, config }),
+  }))
 }

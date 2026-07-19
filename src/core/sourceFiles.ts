@@ -13,6 +13,8 @@ export type SourceGenerationOptions = {
   catalogFile?: string
   existingInterfaceNames?: Record<string, string>
   existingLanguageTypeName?: string
+  existingPropertyTypes?: Record<string, string>
+  existingTypeImports?: Record<string, Array<{ name: string; path: string }>>
 }
 
 type ObjectNode = { [key: string]: SourceNode }
@@ -95,12 +97,18 @@ function getFunctionType(source: string): string {
   return `(${parameters.join(', ')}) => string`
 }
 
-function renderType(value: SourceNode, indentation: number): string {
+function renderType(
+  value: SourceNode,
+  indentation: number,
+  keyPath: string,
+  existingPropertyTypes: Record<string, string>,
+): string {
   if (isTypeReference(value)) return value.$reference
+  if (existingPropertyTypes[keyPath]) return existingPropertyTypes[keyPath]
   if (isFunctionDescriptor(value)) return getFunctionType(value.source)
   if (Array.isArray(value)) {
     if (value.length === 0) return 'unknown[]'
-    const types = [...new Set(value.map((item) => renderType(item, indentation)))]
+    const types = [...new Set(value.map((item) => renderType(item, indentation, keyPath, existingPropertyTypes)))]
     return types.length === 1 ? `${types[0]}[]` : `Array<${types.join(' | ')}>`
   }
   if (isRecord(value)) {
@@ -108,7 +116,10 @@ function renderType(value: SourceNode, indentation: number): string {
     if (entries.length === 0) return 'Record<string, never>'
     const pad = ' '.repeat(indentation)
     const childPad = ' '.repeat(indentation + 2)
-    return `{\n${entries.map(([key, item]) => `${childPad}${propertyName(key)}: ${renderType(item as SourceNode, indentation + 2)};`).join('\n')}\n${pad}}`
+    return `{\n${entries.map(([key, item]) => {
+      const childPath = keyPath ? `${keyPath}.${key}` : key
+      return `${childPad}${propertyName(key)}: ${renderType(item as SourceNode, indentation + 2, childPath, existingPropertyTypes)};`
+    }).join('\n')}\n${pad}}`
   }
   if (value === null) return 'null'
   return typeof value
@@ -139,13 +150,22 @@ function relativeImport(fromFile: string, toFile: string): string {
   return relative.startsWith('.') ? relative : `./${relative}`
 }
 
-function renderBaseFile(typeName: string, tree: ObjectNode, imports: Array<{ name: string; path: string }>): string {
+function renderBaseFile(
+  typeName: string,
+  ownerKeyPath: string,
+  tree: ObjectNode,
+  imports: Array<{ name: string; path: string }>,
+  existingPropertyTypes: Record<string, string>,
+): string {
   const importLines = [
     "import type { Translation } from '@wads.dev/i18n-ts'",
     ...imports.map((item) => `import type ${item.name} from '${item.path}'`),
   ]
   const body = Object.entries(tree)
-    .map(([key, value]) => `  ${propertyName(key)}: ${renderType(value, 2)};`)
+    .map(([key, value]) => {
+      const keyPath = ownerKeyPath ? `${ownerKeyPath}.${key}` : key
+      return `  ${propertyName(key)}: ${renderType(value, 2, keyPath, existingPropertyTypes)};`
+    })
     .join('\n')
   return `${importLines.join('\n')}\n\nexport default interface ${typeName} extends Translation {\n${body}\n}\n`
 }
@@ -172,7 +192,7 @@ function renderIndexFile(
   rootBasePath: string,
 ): string {
   const languageKeys = Object.keys(bundle.languages)
-  const languageUnion = languageKeys.map(JSON.stringify).join(' | ') || 'never'
+  const languageUnion = languageKeys.map((key) => JSON.stringify(key)).join(' | ') || 'never'
   const entries = languageKeys.map((languageKey) => {
     const language = bundle.languages[languageKey]!
     const filename = config.languageReplacer[languageKey] || languageKey
@@ -228,11 +248,25 @@ export function generateSourceFiles(
         $value: toIdentifier(child.keyPath),
       })
     })
-    const baseImports = ownerChildren.map((child) => ({
+    const generatedBaseImports = ownerChildren.map((child) => ({
       name: typeNames.get(child.keyPath)!,
       path: relativeImport(basePath, basePaths.get(child.keyPath)!),
     }))
-    files.push({ kind: 'base', path: basePath, content: renderBaseFile(typeName, referenceTree, baseImports) })
+    const generatedImportNames = new Set(generatedBaseImports.map((item) => item.name))
+    const preservedBaseImports = (options.existingTypeImports?.[basePath] || [])
+      .filter((item) => !generatedImportNames.has(item.name))
+    const baseImports = [...generatedBaseImports, ...preservedBaseImports]
+    files.push({
+      kind: 'base',
+      path: basePath,
+      content: renderBaseFile(
+        typeName,
+        owner.keyPath,
+        referenceTree,
+        baseImports,
+        options.existingPropertyTypes || {},
+      ),
+    })
 
     Object.entries(validBundle.languages).forEach(([languageKey, language]) => {
       const filenameValue = config.languageReplacer[languageKey] || languageKey

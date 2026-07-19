@@ -52,6 +52,39 @@ The current directory is the project root. On startup, the server reads `i18n.co
   --bundle i18n.bundle.json
 ```
 
+## CLI commands
+
+Generate the default `i18n.bundle.json` without starting the server:
+
+```sh
+i18n-edit bundle
+i18n-edit bundle --output review.bundle.json
+```
+
+Print the same generated-file preview used by the Web Editor, enriched with the current filesystem state:
+
+```sh
+i18n-edit preview
+i18n-edit preview --file review.bundle.json
+```
+
+Preview is read-only. It resolves the bundle and `i18n.config.json`, then classifies every managed path as unchanged, modified, new or deleted. New paths are green, modified paths are yellow and files that exist inside a managed `i18n` directory but are absent from the generation plan are red. Unified diffs for new and modified files are shown by default; use `--no-diff` for the compact file list. Deleted files never print their full removed contents.
+
+Plan the source files generated from a bundle:
+
+```sh
+i18n-edit export
+i18n-edit export --file review.bundle.json
+```
+
+The export command shows the same status and unified-diff preview before asking for confirmation. Use `--no-diff` for the compact plan, and use `--yes` or `-y` only in automation or after reviewing the plan:
+
+```sh
+i18n-edit export --file review.bundle.json --yes
+```
+
+Each configured `i18n` directory is fully managed. Generated `base.ts`, language files and the configured root catalog are written; files left inside those directories but absent from the plan are removed after confirmation. Files outside managed `i18n` directories are never deleted. Writes are restricted to the selected project directory and use a temporary file followed by an atomic rename.
+
 After the npm package is published, its binaries will be named `i18n-edit` and `i18n-editor`.
 
 The shortest npm invocation will be:
@@ -70,4 +103,4 @@ Because the npm package is scoped, `npx i18n-editor` would refer to a different,
 
 ## Current boundary
 
-The server reads project configuration and bundles through `GET /api/project`. It can generate a missing bundle through `POST /api/bundle`; this is currently its only project write. It does not modify translation source files. Applying edited bundles and regenerating source files will be introduced with a separate filesystem safety contract.
+The server reads project configuration and bundles through `GET /api/project`. It can generate a missing bundle through `POST /api/bundle`; this is currently its only project write. The Web Editor can explicitly request a read-only filesystem comparison through `POST /api/export-preview`. Source regeneration is available explicitly through the CLI `export` command and is not exposed as a browser route yet.

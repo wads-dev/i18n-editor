@@ -66,11 +66,6 @@
             <textarea id="language-replacer" spellcheck="false" placeholder='{ "pt": "ptBR" }'></textarea>
           </label>
         </div>
-        <div class="export-preview-section">
-          <h3>Prévia dos arquivos gerados</h3>
-          <p>Esta é uma simulação em tempo real. A exportação de ZIP será adicionada em seguida usando a mesma configuração.</p>
-          <div id="export-preview" class="export-preview" aria-live="polite"></div>
-        </div>
       </section>
 
       <section class="report" aria-labelledby="report-title">
@@ -87,6 +82,18 @@
         </div>
         <div id="empty-state" class="empty-state">Nenhum bundle carregado.</div>
         <div id="table-wrap" class="table-wrap" hidden></div>
+      </section>
+
+      <section class="export-preview-panel" aria-labelledby="export-preview-title">
+        <div class="export-preview-header">
+          <div>
+            <h2 id="export-preview-title">Prévia dos arquivos gerados</h2>
+            <p>Esta é uma simulação em tempo real. Verifique os diffs quando quiser comparar o resultado com os arquivos atuais do projeto.</p>
+            <p id="export-preview-feedback" class="export-preview-feedback" role="status" aria-live="polite"></p>
+          </div>
+          <button id="check-export-diffs" class="secondary-button" type="button" disabled>Verificar diffs</button>
+        </div>
+        <div id="export-preview" class="export-preview" aria-live="polite"></div>
       </section>
     </main>
   </body>

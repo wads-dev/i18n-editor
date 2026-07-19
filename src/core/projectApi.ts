@@ -16,6 +16,22 @@ export type GenerateBundleResult = {
   bundlePath: string
 }
 
+export type ProjectExportPreviewRequest = {
+  bundle: I18nBundle
+  config: I18nProjectConfig
+}
+
+export type ProjectExportPreviewChange = {
+  kind: 'base' | 'index' | 'language' | 'obsolete'
+  path: string
+  status: 'create' | 'modify' | 'unchanged' | 'delete'
+  diff?: string
+}
+
+export type ProjectExportPreviewResult = {
+  changes: ProjectExportPreviewChange[]
+}
+
 export type ApiError = {
   error: string
 }

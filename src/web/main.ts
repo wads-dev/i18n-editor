@@ -9,9 +9,10 @@ import { createDefaultProjectConfig, normalizeProjectConfig } from '@wads.dev/i1
 import { setStringValue } from '../core/setStringValue.js'
 import { renderExportPreview } from './export-preview.js'
 import { renderLevelImportFields } from './project-settings.js'
-import { generateProjectBundle, getProjectInfo } from './project-api.js'
+import { checkProjectExport, generateProjectBundle, getProjectInfo } from './project-api.js'
 import { createEditorState } from './state.js'
 import { createEditorView } from './view.js'
+import type { ProjectExportPreviewChange } from '../core/projectApi.js'
 
 const state = createEditorState()
 
@@ -32,6 +33,8 @@ const elements = {
   languageFileTemplate: getElement<HTMLInputElement>('#language-file-template'),
   languageReplacer: getElement<HTMLTextAreaElement>('#language-replacer'),
   exportPreview: getElement<HTMLElement>('#export-preview'),
+  exportPreviewFeedback: getElement<HTMLElement>('#export-preview-feedback'),
+  checkExportDiffs: getElement<HTMLButtonElement>('#check-export-diffs'),
   search: getElement<HTMLInputElement>('#translation-search'),
   summary: getElement<HTMLElement>('#bundle-summary'),
   settingsPanel: getElement<HTMLElement>('#settings-panel'),
@@ -44,6 +47,22 @@ const elements = {
 
 let settingsPanelVisible = false
 let projectConfig = createDefaultProjectConfig()
+let checkedExportChanges: ProjectExportPreviewChange[] | null = null
+let exportPreviewRequestVersion = 0
+
+function renderCurrentExportPreview() {
+  renderExportPreview(elements.exportPreview, state.getBundle(), projectConfig, checkedExportChanges)
+}
+
+function invalidateExportPreview() {
+  exportPreviewRequestVersion += 1
+  checkedExportChanges = null
+  elements.exportPreviewFeedback.textContent = ''
+  elements.exportPreviewFeedback.classList.remove('error')
+  elements.checkExportDiffs.disabled = !state.getBundle()
+  elements.checkExportDiffs.textContent = 'Verificar diffs'
+  renderCurrentExportPreview()
+}
 
 const view = createEditorView({
   emptyState: elements.emptyState,
@@ -125,7 +144,7 @@ function applyProjectConfig(nextConfig, persist = true, renderLevelImports = tru
     })
   }
   view.setProjectConfig(projectConfig)
-  renderExportPreview(elements.exportPreview, state.getBundle(), projectConfig)
+  invalidateExportPreview()
 
   if (!persist) return
   projectConfigQueue = projectConfigQueue
@@ -149,13 +168,44 @@ function persistBundle(bundle) {
 
 state.subscribe((bundle) => {
   view.render(bundle)
-  renderExportPreview(elements.exportPreview, bundle, projectConfig)
+  invalidateExportPreview()
   if (bundle) persistBundle(bundle)
 })
 view.render(state.getBundle())
 
 elements.toggleSettingsPanel.addEventListener('click', () => {
   setSettingsPanelVisibility(!settingsPanelVisible)
+})
+
+elements.checkExportDiffs.addEventListener('click', async () => {
+  const bundle = state.getBundle()
+  if (!bundle) return
+
+  const requestVersion = ++exportPreviewRequestVersion
+  elements.checkExportDiffs.disabled = true
+  elements.checkExportDiffs.textContent = 'Verificando…'
+  elements.exportPreviewFeedback.textContent = 'Comparando com os arquivos atuais do projeto…'
+  elements.exportPreviewFeedback.classList.remove('error')
+
+  try {
+    const result = await checkProjectExport(bundle, projectConfig)
+    if (requestVersion !== exportPreviewRequestVersion) return
+    checkedExportChanges = result.changes
+    renderCurrentExportPreview()
+    const changed = result.changes.filter(({ status }) => status !== 'unchanged').length
+    elements.exportPreviewFeedback.textContent = changed === 0
+      ? 'Os arquivos do projeto já correspondem à prévia.'
+      : `${changed} arquivo${changed === 1 ? '' : 's'} com alterações planejadas.`
+  } catch (error) {
+    if (requestVersion !== exportPreviewRequestVersion) return
+    elements.exportPreviewFeedback.textContent = `Não foi possível verificar os diffs: ${error instanceof Error ? error.message : String(error)}`
+    elements.exportPreviewFeedback.classList.add('error')
+  } finally {
+    if (requestVersion === exportPreviewRequestVersion) {
+      elements.checkExportDiffs.disabled = false
+      elements.checkExportDiffs.textContent = 'Verificar novamente'
+    }
+  }
 })
 
 elements.levelCount.addEventListener('input', () => {

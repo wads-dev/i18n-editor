@@ -51,12 +51,13 @@ function getReplacement(
   return { found: false, value: undefined }
 }
 
-export function getTranslationOwner(fullKey: string, config: I18nProjectConfig): TranslationOwner {
+export function getTranslationOwnerChain(fullKey: string, config: I18nProjectConfig): TranslationOwner[] {
   const segments = fullKey.split('.')
   const groupCount = Math.min(config.levelCount, Math.max(segments.length - 1, 0))
   const rootImport = getLevelImport(config, 0)
   let directory = resolveImportAlias(expandTemplate(rootImport.path, ''), config.importAliases)
   let consumedSegments = 0
+  const owners: TranslationOwner[] = [{ directory, keyPath: '' }]
 
   for (let level = 1; level <= groupCount; level += 1) {
     const segment = segments[level - 1]!
@@ -68,6 +69,7 @@ export function getTranslationOwner(fullKey: string, config: I18nProjectConfig):
       if (fullReplacement.value !== null) {
         directory = resolveImportAlias(fullReplacement.value, config.importAliases)
         consumedSegments = level
+        owners.push({ directory, keyPath: objectPath })
       }
       break
     }
@@ -80,12 +82,15 @@ export function getTranslationOwner(fullKey: string, config: I18nProjectConfig):
       ? resolved
       : appendPath(directory, resolved)
     consumedSegments = level
+    owners.push({ directory, keyPath: objectPath })
   }
 
-  return {
-    directory,
-    keyPath: segments.slice(0, consumedSegments).join('.'),
-  }
+  void consumedSegments
+  return owners
+}
+
+export function getTranslationOwner(fullKey: string, config: I18nProjectConfig): TranslationOwner {
+  return getTranslationOwnerChain(fullKey, config).at(-1)!
 }
 
 function isFunctionDescriptor(value: unknown): boolean {
@@ -126,12 +131,13 @@ export function buildTranslationOwners(
 
   if (referenceLanguage) {
     collectTranslationKeys(referenceLanguage.translations).forEach((key) => {
-      const owner = getTranslationOwner(key, validConfig)
-      const existing = owners.get(owner.directory)
-      if (existing && existing.keyPath !== owner.keyPath) {
-        throw new Error(`The export path "${owner.directory}" resolves multiple translation owners.`)
-      }
-      owners.set(owner.directory, owner)
+      getTranslationOwnerChain(key, validConfig).forEach((owner) => {
+        const existing = owners.get(owner.directory)
+        if (existing && existing.keyPath !== owner.keyPath) {
+          throw new Error(`The export path "${owner.directory}" resolves multiple translation owners.`)
+        }
+        owners.set(owner.directory, owner)
+      })
     })
   }
 
