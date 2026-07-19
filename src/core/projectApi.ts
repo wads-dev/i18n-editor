@@ -21,6 +21,10 @@ export type ProjectExportPreviewRequest = {
   config: EditorProjectConfig
 }
 
+export type ProjectExportRequest = ProjectExportPreviewRequest & {
+  deleteObsolete?: boolean
+}
+
 export type ProjectExportPreviewChange = {
   kind: 'base' | 'index' | 'language' | 'obsolete'
   path: string
@@ -30,6 +34,12 @@ export type ProjectExportPreviewChange = {
 
 export type ProjectExportPreviewResult = {
   changes: ProjectExportPreviewChange[]
+}
+
+export type ProjectExportResult = ProjectExportPreviewResult & {
+  written: number
+  deleted: number
+  preserved: number
 }
 
 export type ApiError = {

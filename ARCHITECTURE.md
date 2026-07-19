@@ -23,8 +23,9 @@ The Editor is a local Node.js application with a browser interface. The publishe
 - `GET /api/project` reads the current project configuration and bundle and reports whether a catalog is available for generation.
 - `POST /api/bundle` runs the `@wads.dev/i18n-ts` bundler for the fixed catalog and writes only the configured bundle file.
 - `POST /api/export-preview` compares the browser's in-memory bundle and configuration with the fixed project filesystem. It is read-only and returns relative paths, statuses and unified diffs, never generated contents or absolute paths.
+- `POST /api/export` recalculates that plan from the browser's in-memory bundle and configuration, then writes generated sources through the same atomic export operation used by the CLI. Obsolete files require either project `autoDelete` or explicit confirmation from the editor request.
 - Concurrent generation requests share one in-flight operation.
-- HTTP routes keep translation source files read-only. Source regeneration is an explicit CLI operation with the safety contract below.
+- The browser can regenerate translation sources only through an explicit export action and confirmation. It cannot choose the project directory or arbitrary output paths.
 
 The default project is the process working directory. CLI arguments override discovery, followed by `catalogFile` from `i18n.config.json`, then conventional catalog paths.
 
@@ -32,7 +33,7 @@ The default project is the process working directory. CLI arguments override dis
 
 ## Source export safety
 
-- `i18n-edit export` and `i18n-edit sync` are the source-writing entry points in this increment; the browser cannot invoke either.
+- `i18n-edit export`, `i18n-edit sync` and the confirmed Web Editor export action are the source-writing entry points.
 - The complete plan is calculated before writing and classifies files as created, modified or unchanged.
 - Interactive use requires explicit confirmation. `--yes` is the opt-in non-interactive mode.
 - Every destination is validated to remain inside the selected project root.

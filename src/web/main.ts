@@ -9,7 +9,7 @@ import { createDefaultEditorProjectConfig, normalizeEditorProjectConfig } from '
 import { setStringValue } from '../core/setStringValue.js'
 import { renderExportPreview } from './export-preview.js'
 import { renderLevelImportFields } from './project-settings.js'
-import { checkProjectExport, generateProjectBundle, getProjectInfo } from './project-api.js'
+import { checkProjectExport, exportProject, generateProjectBundle, getProjectInfo } from './project-api.js'
 import { createEditorState } from './state.js'
 import { createEditorView } from './view.js'
 import type { ProjectExportPreviewChange } from '../core/projectApi.js'
@@ -49,6 +49,8 @@ const elements = {
   exportPreview: getElement<HTMLElement>('#export-preview'),
   exportPreviewFeedback: getElement<HTMLElement>('#export-preview-feedback'),
   checkExportDiffs: getElement<HTMLButtonElement>('#check-export-diffs'),
+  exportProject: getElement<HTMLButtonElement>('#export-project'),
+  exportDeleteObsolete: getElement<HTMLInputElement>('#export-delete-obsolete'),
   search: getElement<HTMLInputElement>('#translation-search'),
   summary: getElement<HTMLElement>('#bundle-summary'),
   settingsPanel: getElement<HTMLElement>('#settings-panel'),
@@ -74,6 +76,7 @@ function invalidateExportPreview() {
   elements.exportPreviewFeedback.textContent = ''
   elements.exportPreviewFeedback.classList.remove('error', 'warning')
   elements.checkExportDiffs.disabled = !state.getBundle()
+  elements.exportProject.disabled = !state.getBundle()
   elements.checkExportDiffs.textContent = 'Verificar diffs'
   renderCurrentExportPreview()
 }
@@ -146,6 +149,11 @@ function applyProjectConfig(nextConfig, persist = true, renderLevelImports = tru
   elements.ignoredDeletionExtensions.disabled = projectConfig.deletion === false
   elements.autoDelete.checked = projectConfig.deletion !== false && projectConfig.deletion.autoDelete
   elements.autoDelete.disabled = projectConfig.deletion === false
+  elements.exportDeleteObsolete.disabled = projectConfig.deletion === false
+    ? true
+    : projectConfig.deletion.autoDelete
+  elements.exportDeleteObsolete.checked = projectConfig.deletion !== false
+    && projectConfig.deletion.autoDelete
   const codeFormat = projectConfig.exportConfig.codeFormat
   elements.useDoubleQuotes.checked = codeFormat.useDoubleQuotes
   elements.useSemicolons.checked = codeFormat.useSemicolons
@@ -247,6 +255,65 @@ elements.checkExportDiffs.addEventListener('click', async () => {
       elements.checkExportDiffs.disabled = false
       elements.checkExportDiffs.textContent = 'Verificar novamente'
     }
+  }
+})
+
+elements.exportProject.addEventListener('click', async () => {
+  const bundle = state.getBundle()
+  if (!bundle) return
+
+  elements.exportProject.disabled = true
+  elements.checkExportDiffs.disabled = true
+  elements.exportProject.textContent = 'Preparando…'
+  elements.exportPreviewFeedback.textContent = 'Recalculando o plano antes da exportação…'
+  elements.exportPreviewFeedback.classList.remove('error', 'warning')
+
+  try {
+    const preview = await checkProjectExport(bundle, projectConfig)
+    checkedExportChanges = preview.changes
+    renderCurrentExportPreview()
+    const writable = preview.changes.filter(({ status }) => status === 'create' || status === 'modify').length
+    const deletionCandidates = preview.changes.filter(({ status }) => status === 'delete').length
+    const deleteObsolete = projectConfig.deletion !== false
+      && (projectConfig.deletion.autoDelete || elements.exportDeleteObsolete.checked)
+    const deletionText = deletionCandidates === 0
+      ? 'Nenhum arquivo será excluído.'
+      : deleteObsolete
+        ? `${deletionCandidates} arquivo${deletionCandidates === 1 ? '' : 's'} divergente${deletionCandidates === 1 ? '' : 's'} ${deletionCandidates === 1 ? 'será excluído' : 'serão excluídos'}.`
+        : `${deletionCandidates} arquivo${deletionCandidates === 1 ? '' : 's'} divergente${deletionCandidates === 1 ? '' : 's'} ${deletionCandidates === 1 ? 'será preservado' : 'serão preservados'}.`
+
+    if (writable === 0 && (!deleteObsolete || deletionCandidates === 0)) {
+      elements.exportPreviewFeedback.textContent = 'Os arquivos do projeto já estão atualizados.'
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Exportar as alterações para o projeto?\n\n${writable} arquivo${writable === 1 ? '' : 's'} ${writable === 1 ? 'será criado ou sobrescrito' : 'serão criados ou sobrescritos'}. ${deletionText}\n\nRevise os diffs exibidos antes de continuar.`,
+    )
+    if (!confirmed) {
+      elements.exportPreviewFeedback.textContent = 'Exportação cancelada. Nenhum arquivo foi alterado.'
+      return
+    }
+
+    elements.exportProject.textContent = 'Exportando…'
+    elements.exportPreviewFeedback.textContent = 'Escrevendo os arquivos no projeto…'
+    const result = await exportProject(bundle, projectConfig, deleteObsolete)
+    const currentPreview = await checkProjectExport(bundle, projectConfig)
+    checkedExportChanges = currentPreview.changes
+    renderCurrentExportPreview()
+    elements.exportPreviewFeedback.textContent = [
+      `${result.written} arquivo${result.written === 1 ? '' : 's'} ${result.written === 1 ? 'escrito' : 'escritos'}.`,
+      result.deleted > 0 ? `${result.deleted} ${result.deleted === 1 ? 'excluído' : 'excluídos'}.` : '',
+      result.preserved > 0 ? `${result.preserved} divergente${result.preserved === 1 ? '' : 's'} ${result.preserved === 1 ? 'preservado' : 'preservados'}.` : '',
+    ].filter(Boolean).join(' ')
+    setFeedback('Alterações exportadas para os arquivos do projeto.')
+  } catch (error) {
+    elements.exportPreviewFeedback.textContent = `Não foi possível exportar: ${error instanceof Error ? error.message : String(error)}`
+    elements.exportPreviewFeedback.classList.add('error')
+  } finally {
+    elements.exportProject.disabled = !state.getBundle()
+    elements.checkExportDiffs.disabled = !state.getBundle()
+    elements.exportProject.textContent = 'Exportar para o projeto'
   }
 })
 

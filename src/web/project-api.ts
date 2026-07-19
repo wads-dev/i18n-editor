@@ -5,6 +5,7 @@ import type {
   ApiError,
   GenerateBundleResult,
   ProjectExportPreviewResult,
+  ProjectExportResult,
   ProjectInfo,
 } from '../core/projectApi.js'
 
@@ -35,5 +36,13 @@ export async function checkProjectExport(bundle, config): Promise<ProjectExportP
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ bundle, config }),
+  }))
+}
+
+export async function exportProject(bundle, config, deleteObsolete = false): Promise<ProjectExportResult> {
+  return readResponse<ProjectExportResult>(await fetch('/api/export', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bundle, config, deleteObsolete }),
   }))
 }

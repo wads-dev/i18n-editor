@@ -170,7 +170,14 @@
             <p>Esta é uma simulação em tempo real. Verifique os diffs quando quiser comparar o resultado com os arquivos atuais do projeto.</p>
             <p id="export-preview-feedback" class="export-preview-feedback" role="status" aria-live="polite"></p>
           </div>
-          <button id="check-export-diffs" class="secondary-button" type="button" disabled>Verificar diffs</button>
+          <div class="export-actions">
+            <label class="export-delete-option" for="export-delete-obsolete">
+              <input id="export-delete-obsolete" type="checkbox">
+              <span>Excluir arquivos divergentes</span>
+            </label>
+            <button id="check-export-diffs" class="secondary-button" type="button" disabled>Verificar diffs</button>
+            <button id="export-project" class="primary-button" type="button" disabled>Exportar para o projeto</button>
+          </div>
         </div>
         <div id="export-preview" class="export-preview" aria-live="polite"></div>
       </section>

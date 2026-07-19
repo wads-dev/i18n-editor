@@ -58,6 +58,9 @@ h2 { margin-bottom: 4px; font-size: 18px; }
 .export-preview-panel { margin-top: 18px; overflow: hidden; }
 .export-preview-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 20px 22px; border-bottom: 1px solid var(--line); }
 .export-preview-header p { margin-bottom: 0; color: var(--muted); }
+.export-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.export-delete-option { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.export-delete-option input { width: 15px; height: 15px; margin: 0; accent-color: var(--danger); }
 .export-preview-feedback { min-height: 21px; margin-top: 5px; font-size: 13px; }
 .export-preview-feedback.error { color: var(--danger); }
 .export-preview-feedback.warning { color: #b45309; font-weight: 700; }

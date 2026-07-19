@@ -294,7 +294,8 @@ export async function planProjectExport(
 export async function applyProjectExport(
   plan: ProjectExportPlan,
   options: { deleteObsolete?: boolean } = {},
-): Promise<void> {
+): Promise<{ written: number; deleted: number; preserved: number }> {
+  let written = 0
   for (const change of plan.changes.filter((item) => item.status !== 'delete')) {
     if (change.status === 'unchanged' || change.content === undefined) continue
     await fs.mkdir(path.dirname(change.absolutePath), { recursive: true })
@@ -302,6 +303,7 @@ export async function applyProjectExport(
     try {
       await fs.writeFile(temporaryPath, change.content, 'utf8')
       await fs.rename(temporaryPath, change.absolutePath)
+      written += 1
     } catch (error) {
       await fs.rm(temporaryPath, { force: true })
       throw error
@@ -309,10 +311,14 @@ export async function applyProjectExport(
   }
   const shouldDelete = plan.deletion !== false
     && (plan.deletion.autoDelete || options.deleteObsolete === true)
+  let deleted = 0
   if (shouldDelete) {
     for (const change of plan.changes.filter((item) => item.status === 'delete')) {
       await fs.rm(change.absolutePath, { force: true, recursive: true })
+      deleted += 1
     }
     await Promise.all(plan.managedDirectories.map(removeEmptyDescendants))
   }
+  const deletionCandidates = plan.changes.filter((item) => item.status === 'delete').length
+  return { written, deleted, preserved: deletionCandidates - deleted }
 }
