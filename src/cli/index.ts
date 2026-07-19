@@ -21,6 +21,17 @@ type ServerOptions = {
   bundle?: string
 }
 
+type BundleOptions = {
+  output: string
+}
+
+type ExportOptions = {
+  file: string
+  yes?: boolean
+  delete?: boolean
+  diff: boolean
+}
+
 function parsePort(value: string): number {
   const port = Number(value)
   if (!Number.isInteger(port) || port < 0 || port > 65_535) {
@@ -107,6 +118,36 @@ async function confirmExport(deletionCount: number): Promise<boolean> {
   }
 }
 
+async function generateBundle(command: Command, output: string): Promise<void> {
+  const projectOptions = getProjectOptions(command, output)
+  const result = await createProjectContext(projectOptions).generateBundle()
+  console.log(`i18n bundle created at ${result.bundlePath}`)
+  console.log(`${Object.keys(result.bundle.languages).length} languages exported.`)
+}
+
+async function exportBundle(command: Command, options: ExportOptions): Promise<void> {
+  const plan = await planProjectExport(getProjectOptions(command, options.file))
+  const { writeCount, deletionCount } = printExportPlan(plan, options.diff)
+  const deleteObsolete = plan.deletion !== false
+    && (plan.deletion.autoDelete || options.delete === true)
+  const appliedDeletionCount = deleteObsolete ? deletionCount : 0
+  const changeCount = writeCount + appliedDeletionCount
+  if (changeCount === 0) {
+    if (deletionCount > 0) {
+      console.log('No files were changed. Deletion candidates were preserved; re-run with --delete to remove them.')
+      return
+    }
+    console.log('The project already matches the bundle.')
+    return
+  }
+  if (!options.yes && !await confirmExport(appliedDeletionCount)) {
+    console.log('Export cancelled. No files were changed.')
+    return
+  }
+  await applyProjectExport(plan, { deleteObsolete })
+  console.log(`${writeCount} files written, ${appliedDeletionCount} deleted.`)
+}
+
 function createProgram(): Command {
   const packageJson = createRequire(import.meta.url)('../../package.json') as { version: string }
   const program = new Command()
@@ -138,11 +179,8 @@ function createProgram(): Command {
     .command('bundle')
     .description('generate a portable translation bundle')
     .option('-o, --output <path>', 'output bundle path', 'i18n.bundle.json')
-    .action(async (options: { output: string }, command: Command) => {
-      const projectOptions = getProjectOptions(command, options.output)
-      const result = await createProjectContext(projectOptions).generateBundle()
-      console.log(`i18n bundle created at ${result.bundlePath}`)
-      console.log(`${Object.keys(result.bundle.languages).length} languages exported.`)
+    .action(async (options: BundleOptions, command: Command) => {
+      await generateBundle(command, options.output)
     })
 
   program
@@ -161,27 +199,20 @@ function createProgram(): Command {
     .option('-y, --yes', 'apply the plan without confirmation')
     .option('--delete', 'delete divergent files reported by the plan')
     .option('--no-diff', 'hide generated content diffs')
-    .action(async (options: { file: string, yes?: boolean, delete?: boolean, diff: boolean }, command: Command) => {
-      const plan = await planProjectExport(getProjectOptions(command, options.file))
-      const { writeCount, deletionCount } = printExportPlan(plan, options.diff)
-      const deleteObsolete = plan.deletion !== false
-        && (plan.deletion.autoDelete || options.delete === true)
-      const appliedDeletionCount = deleteObsolete ? deletionCount : 0
-      const changeCount = writeCount + appliedDeletionCount
-      if (changeCount === 0) {
-        if (deletionCount > 0) {
-          console.log('No files were changed. Deletion candidates were preserved; re-run with --delete to remove them.')
-          return
-        }
-        console.log('The project already matches the bundle.')
-        return
-      }
-      if (!options.yes && !await confirmExport(appliedDeletionCount)) {
-        console.log('Export cancelled. No files were changed.')
-        return
-      }
-      await applyProjectExport(plan, { deleteObsolete: options.delete })
-      console.log(`${writeCount} files written, ${appliedDeletionCount} deleted.`)
+    .action(async (options: ExportOptions, command: Command) => {
+      await exportBundle(command, options)
+    })
+
+  program
+    .command('sync')
+    .description('bundle the project, then regenerate its translation files')
+    .option('-o, --output <path>', 'bundle path used between the two operations', 'i18n.bundle.json')
+    .option('-y, --yes', 'apply the export plan without confirmation')
+    .option('--delete', 'delete divergent files reported by the plan')
+    .option('--no-diff', 'hide generated content diffs')
+    .action(async (options: BundleOptions & Omit<ExportOptions, 'file'>, command: Command) => {
+      await generateBundle(command, options.output)
+      await exportBundle(command, { ...options, file: options.output })
     })
 
   return program

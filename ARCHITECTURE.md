@@ -32,7 +32,7 @@ The default project is the process working directory. CLI arguments override dis
 
 ## Source export safety
 
-- `i18n-edit export` is the only source-writing entry point in this increment; the browser cannot invoke it.
+- `i18n-edit export` and `i18n-edit sync` are the source-writing entry points in this increment; the browser cannot invoke either.
 - The complete plan is calculated before writing and classifies files as created, modified or unchanged.
 - Interactive use requires explicit confirmation. `--yes` is the opt-in non-interactive mode.
 - Every destination is validated to remain inside the selected project root.

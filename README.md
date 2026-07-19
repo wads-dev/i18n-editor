@@ -84,6 +84,15 @@ i18n-edit export --file review.bundle.json --delete
 i18n-edit export --file review.bundle.json --delete --yes
 ```
 
+Generate a fresh bundle and immediately apply its export plan with one command:
+
+```sh
+i18n-edit sync
+i18n-edit sync --output review.bundle.json
+```
+
+`sync` is equivalent to running `bundle` followed by `export` with the same bundle path. It preserves the export confirmation and accepts `--yes`, `--delete` and `--no-diff` when automation is intentional.
+
 Each configured `i18n` directory is checked against the generated plan. Generated `base.ts`, language files and the configured root catalog are written; other files become deletion candidates unless their extensions are ignored by project configuration. Set `deletion` to `false` to disable this detection entirely. Files outside configured `i18n` directories are never candidates. Writes are restricted to the selected project directory and use a temporary file followed by an atomic rename.
 
 After the npm package is published, its binaries will be named `i18n-edit` and `i18n-editor`.
