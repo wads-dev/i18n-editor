@@ -1,0 +1,26 @@
+import { assertBundle } from '@wads.dev/i18n-ts/bundle'
+import { normalizeProjectConfig } from '@wads.dev/i18n-ts/config'
+
+import type { ApiError, GenerateBundleResult, ProjectInfo } from '../core/projectApi.js'
+
+async function readResponse<T>(response: Response): Promise<T> {
+  const value = await response.json() as T | ApiError
+  if (!response.ok) {
+    throw new Error('error' in (value as ApiError) ? (value as ApiError).error : `Request failed with status ${response.status}.`)
+  }
+  return value as T
+}
+
+export async function getProjectInfo(): Promise<ProjectInfo> {
+  const info = await readResponse<ProjectInfo>(await fetch('/api/project', { cache: 'no-store' }))
+  return {
+    ...info,
+    config: info.config ? normalizeProjectConfig(info.config) : null,
+    bundle: info.bundle ? assertBundle(info.bundle) : null,
+  }
+}
+
+export async function generateProjectBundle(): Promise<GenerateBundleResult> {
+  const result = await readResponse<GenerateBundleResult>(await fetch('/api/bundle', { method: 'POST' }))
+  return { ...result, bundle: assertBundle(result.bundle) }
+}

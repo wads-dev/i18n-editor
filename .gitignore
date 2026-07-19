@@ -1,0 +1,4 @@
+*.bundle.json
+i18n.config.json
+node_modules/
+dist/

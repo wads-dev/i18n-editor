@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Editor de bundle i18n</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./editor.js"></script>
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-header">
+        <p class="eyebrow">i18n bundle</p>
+        <div class="page-title-row">
+          <h1>Visualizador de traduções</h1>
+          <button id="toggle-settings-panel" class="icon-button" type="button" aria-label="Mostrar configurações" aria-expanded="false" title="Mostrar configurações">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 13.5 1.1.9-2 3.4-1.3-.5a8 8 0 0 1-1.8 1l-.2 1.4h-4l-.2-1.4a8 8 0 0 1-1.8-1l-1.3.5-2-3.4 1.1-.9a8.5 8.5 0 0 1 0-2l-1.1-.9 2-3.4 1.3.5a8 8 0 0 1 1.8-1l.2-1.4h4l.2 1.4a8 8 0 0 1 1.8 1l1.3-.5 2 3.4-1.1.9a8.5 8.5 0 0 1 0 2Z"/></svg>
+          </button>
+        </div>
+        <p class="intro">O editor detecta a configuração e a bundle do projeto atual. Quando necessário, ele gera a bundle diretamente do catálogo TypeScript.</p>
+      </header>
+
+      <section id="project-status" class="project-status loading" role="status" aria-live="polite">
+        <span class="status-spinner" aria-hidden="true"></span>
+        <span id="project-status-text">Conectando ao projeto…</span>
+        <button id="retry-project-load" type="button" hidden>Tentar novamente</button>
+      </section>
+
+      <section id="settings-panel" class="settings-panel" aria-labelledby="settings-title" hidden>
+        <div class="settings-intro">
+          <h2 id="settings-title">Configurações do projeto</h2>
+          <p>Defina a estrutura das chaves e os caminhos que uma futura exportação deverá gerar a partir da raiz do projeto.</p>
+        </div>
+        <div class="settings-fields">
+          <label class="level-field" for="level-count">
+            <span>Quantidade de níveis</span>
+            <input id="level-count" type="number" min="0" step="1" value="2">
+          </label>
+          <label class="level-field level-names-field" for="level-names">
+            <span>Nomes dos níveis</span>
+            <input id="level-names" type="text" value="Módulo, Feature" placeholder="Módulo, Feature, Subfeature">
+          </label>
+        </div>
+        <div class="level-paths-section">
+          <h3>Imports por nível</h3>
+          <p>O nível 0 representa a raiz e não consome uma parte da chave. Use <code>{value}</code> nos demais níveis. Replacers aceitam JSON plano ou aninhado.</p>
+          <div id="level-imports" class="level-imports"></div>
+        </div>
+        <div class="settings-fields output-fields">
+          <label class="level-field" for="translations-directory">
+            <span>Pasta de traduções</span>
+            <input id="translations-directory" type="text" value="i18n" placeholder="i18n">
+          </label>
+          <label class="level-field" for="language-file-template">
+            <span>Arquivo por idioma</span>
+            <input id="language-file-template" type="text" value="{language}.ts" placeholder="{language}.ts">
+          </label>
+        </div>
+        <div class="settings-fields output-fields">
+          <label class="level-field level-json-field" for="import-aliases">
+            <span>Aliases de import (JSON)</span>
+            <textarea id="import-aliases" spellcheck="false" placeholder='{ "@/": "src/" }'></textarea>
+          </label>
+          <label class="level-field level-json-field" for="language-replacer">
+            <span>Replacer dos idiomas (JSON)</span>
+            <textarea id="language-replacer" spellcheck="false" placeholder='{ "pt": "ptBR" }'></textarea>
+          </label>
+        </div>
+        <div class="export-preview-section">
+          <h3>Prévia dos arquivos gerados</h3>
+          <p>Esta é uma simulação em tempo real. A exportação de ZIP será adicionada em seguida usando a mesma configuração.</p>
+          <div id="export-preview" class="export-preview" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section class="report" aria-labelledby="report-title">
+        <div class="report-header">
+          <div>
+            <h2 id="report-title">Tabela de traduções</h2>
+            <p id="bundle-summary">Carregue um bundle para visualizar as traduções.</p>
+            <p id="editor-feedback" class="feedback" role="status" aria-live="polite"></p>
+          </div>
+          <label class="search-field" for="translation-search">
+            <span>Buscar</span>
+            <input id="translation-search" type="search" placeholder="Chave ou tradução">
+          </label>
+        </div>
+        <div id="empty-state" class="empty-state">Nenhum bundle carregado.</div>
+        <div id="table-wrap" class="table-wrap" hidden></div>
+      </section>
+    </main>
+  </body>
+</html>
