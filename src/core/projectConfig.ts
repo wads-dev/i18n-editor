@@ -19,6 +19,11 @@ export type I18nCodeFormatConfig = {
   useSemicolons: boolean
   useShorthandProperties: boolean
   useTrailingCommas: boolean
+  printWidth: number
+  maxObjectInlineItems: number
+  maxArrayInlineItems: number
+  objectLayout: 'fit' | 'multiline'
+  arrayLayout: 'fit' | 'multiline'
   indentation: {
     character: 'space' | 'tab'
     size: number
@@ -46,11 +51,19 @@ function normalizeCodeFormat(value: unknown, legacyExportConfig: Record<string, 
   const input = isRecord(value) ? value : {}
   const indentation = isRecord(input.indentation) ? input.indentation : {}
   const indentationSize = Number.parseInt(String(indentation.size ?? 2), 10)
+  const printWidth = Number.parseInt(String(input.printWidth ?? 120), 10)
+  const maxObjectInlineItems = Number.parseInt(String(input.maxObjectInlineItems ?? 4), 10)
+  const maxArrayInlineItems = Number.parseInt(String(input.maxArrayInlineItems ?? 8), 10)
   return {
     useDoubleQuotes: (input.useDoubleQuotes ?? legacyExportConfig.useDoubleQuotes) === true,
     useSemicolons: input.useSemicolons !== false,
     useShorthandProperties: input.useShorthandProperties !== false,
     useTrailingCommas: input.useTrailingCommas !== false,
+    printWidth: Number.isFinite(printWidth) ? Math.min(400, Math.max(40, printWidth)) : 120,
+    maxObjectInlineItems: Number.isFinite(maxObjectInlineItems) ? Math.min(100, Math.max(0, maxObjectInlineItems)) : 4,
+    maxArrayInlineItems: Number.isFinite(maxArrayInlineItems) ? Math.min(100, Math.max(0, maxArrayInlineItems)) : 8,
+    objectLayout: input.objectLayout === 'multiline' ? 'multiline' : 'fit',
+    arrayLayout: input.arrayLayout === 'multiline' ? 'multiline' : 'fit',
     indentation: {
       character: indentation.character === 'tab' ? 'tab' : 'space',
       size: Number.isFinite(indentationSize) ? Math.min(8, Math.max(1, indentationSize)) : 2,

@@ -99,6 +99,32 @@
               <span>Quantidade por nível</span>
               <input id="indentation-size" type="number" min="1" max="8" step="1" value="2">
             </label>
+            <label class="level-field" for="print-width">
+              <span>Largura máxima da linha</span>
+              <input id="print-width" type="number" min="40" max="400" step="1" value="120">
+            </label>
+            <label class="level-field" for="max-object-inline-items">
+              <span>Máximo de propriedades inline</span>
+              <input id="max-object-inline-items" type="number" min="0" max="100" step="1" value="4">
+            </label>
+            <label class="level-field" for="max-array-inline-items">
+              <span>Máximo de itens inline</span>
+              <input id="max-array-inline-items" type="number" min="0" max="100" step="1" value="8">
+            </label>
+            <label class="level-field" for="object-layout">
+              <span>Layout de objetos</span>
+              <select id="object-layout">
+                <option value="fit">Inline quando couber</option>
+                <option value="multiline">Sempre multiline</option>
+              </select>
+            </label>
+            <label class="level-field" for="array-layout">
+              <span>Layout de arrays</span>
+              <select id="array-layout">
+                <option value="fit">Inline quando couber</option>
+                <option value="multiline">Sempre multiline</option>
+              </select>
+            </label>
           </div>
         </div>
         <div class="deletion-settings-section">

@@ -95,6 +95,18 @@ function readTypeImports(content: string | null): Array<{ name: string; path: st
   })
 }
 
+function readValueImports(content: string | null): Array<{ name: string; path: string }> {
+  if (!content) return []
+  const sourceFile = ts.createSourceFile('language.ts', content, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  return sourceFile.statements.flatMap((statement) => {
+    if (!ts.isImportDeclaration(statement)
+      || statement.importClause?.isTypeOnly
+      || !statement.importClause?.name
+      || !ts.isStringLiteral(statement.moduleSpecifier)) return []
+    return [{ name: statement.importClause.name.text, path: statement.moduleSpecifier.text }]
+  })
+}
+
 function normalizeProjectPath(filePath: string): string {
   return filePath.replaceAll(path.sep, '/').replaceAll(/\/+/g, '/')
 }
@@ -183,6 +195,7 @@ export async function planProjectExport(
   const existingInterfaceNames: Record<string, string> = {}
   const existingPropertyTypes: Record<string, string> = {}
   const existingTypeImports: Record<string, Array<{ name: string; path: string }>> = {}
+  const existingValueImportOrder: Record<string, string[]> = {}
   const baseContents = new Map<string, string | null>()
   await Promise.all(exportFiles.filter((file) => file.kind === 'base').map(async (file) => {
     const content = await readOptionalFile(assertInsideProject(projectDirectory, file.path))
@@ -215,6 +228,13 @@ export async function planProjectExport(
     })
   })
 
+  await Promise.all(exportFiles.filter((file) => file.kind === 'language').map(async (file) => {
+    const content = await readOptionalFile(assertInsideProject(projectDirectory, file.path))
+    existingValueImportOrder[file.path] = readValueImports(content)
+      .map((item) => resolveTypeImportPath(file.path, item.path, config))
+      .filter((targetPath): targetPath is string => targetPath !== null && plannedPaths.has(targetPath))
+  }))
+
   const catalogFile = info.catalogPath
     ? path.relative(projectDirectory, info.catalogPath).replaceAll(path.sep, '/')
     : config.catalogFile
@@ -226,6 +246,7 @@ export async function planProjectExport(
     existingInterfaceNames,
     existingPropertyTypes,
     existingTypeImports,
+    existingValueImportOrder,
     existingLanguageTypeName: readLanguageTypeName(existingCatalog) || undefined,
   })
 

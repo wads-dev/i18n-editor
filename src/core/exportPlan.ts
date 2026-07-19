@@ -16,6 +16,7 @@ export type ExportPlanFile = {
 export type TranslationOwner = {
   directory: string
   keyPath: string
+  importPathStyle: 'alias' | 'relative'
 }
 
 type ReplacementResult =
@@ -60,7 +61,7 @@ export function getTranslationOwnerChain(fullKey: string, config: EditorProjectC
   const rootImport = getConfiguredLevelImport(config, 0)
   let directory = resolveImportAlias(expandTemplate(rootImport.path, ''), config.exportConfig.importAliases)
   let consumedSegments = 0
-  const owners: TranslationOwner[] = [{ directory, keyPath: '' }]
+  const owners: TranslationOwner[] = [{ directory, keyPath: '', importPathStyle: 'relative' }]
 
   for (let level = 1; level <= groupCount; level += 1) {
     const segment = segments[level - 1]!
@@ -72,7 +73,11 @@ export function getTranslationOwnerChain(fullKey: string, config: EditorProjectC
       if (fullReplacement.value !== null) {
         directory = resolveImportAlias(fullReplacement.value, config.exportConfig.importAliases)
         consumedSegments = level
-        owners.push({ directory, keyPath: objectPath })
+        owners.push({
+          directory,
+          keyPath: objectPath,
+          importPathStyle: hasAlias(fullReplacement.value, config.exportConfig.importAliases) ? 'alias' : 'relative',
+        })
       }
       break
     }
@@ -85,7 +90,11 @@ export function getTranslationOwnerChain(fullKey: string, config: EditorProjectC
       ? resolved
       : appendPath(directory, resolved)
     consumedSegments = level
-    owners.push({ directory, keyPath: objectPath })
+    owners.push({
+      directory,
+      keyPath: objectPath,
+      importPathStyle: hasAlias(template, config.exportConfig.importAliases) ? 'alias' : 'relative',
+    })
   }
 
   void consumedSegments

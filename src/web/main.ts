@@ -38,6 +38,11 @@ const elements = {
   useTrailingCommas: getElement<HTMLInputElement>('#use-trailing-commas'),
   indentationCharacter: getElement<HTMLSelectElement>('#indentation-character'),
   indentationSize: getElement<HTMLInputElement>('#indentation-size'),
+  printWidth: getElement<HTMLInputElement>('#print-width'),
+  maxObjectInlineItems: getElement<HTMLInputElement>('#max-object-inline-items'),
+  maxArrayInlineItems: getElement<HTMLInputElement>('#max-array-inline-items'),
+  objectLayout: getElement<HTMLSelectElement>('#object-layout'),
+  arrayLayout: getElement<HTMLSelectElement>('#array-layout'),
   deletionEnabled: getElement<HTMLInputElement>('#deletion-enabled'),
   ignoredDeletionExtensions: getElement<HTMLInputElement>('#ignored-deletion-extensions'),
   autoDelete: getElement<HTMLInputElement>('#auto-delete'),
@@ -148,6 +153,11 @@ function applyProjectConfig(nextConfig, persist = true, renderLevelImports = tru
   elements.useTrailingCommas.checked = codeFormat.useTrailingCommas
   elements.indentationCharacter.value = codeFormat.indentation.character
   elements.indentationSize.value = String(codeFormat.indentation.size)
+  elements.printWidth.value = String(codeFormat.printWidth)
+  elements.maxObjectInlineItems.value = String(codeFormat.maxObjectInlineItems)
+  elements.maxArrayInlineItems.value = String(codeFormat.maxArrayInlineItems)
+  elements.objectLayout.value = codeFormat.objectLayout
+  elements.arrayLayout.value = codeFormat.arrayLayout
   if (syncJsonFields) {
     elements.importAliases.value = JSON.stringify(projectConfig.exportConfig.importAliases, null, 2)
     elements.languageReplacer.value = JSON.stringify(projectConfig.languageReplacer, null, 2)
@@ -354,6 +364,56 @@ function updateIndentation(): void {
 
 elements.indentationCharacter.addEventListener('change', updateIndentation)
 elements.indentationSize.addEventListener('input', updateIndentation)
+
+elements.printWidth.addEventListener('input', () => {
+  applyProjectConfig({
+    ...projectConfig,
+    exportConfig: {
+      ...projectConfig.exportConfig,
+      codeFormat: {
+        ...projectConfig.exportConfig.codeFormat,
+        printWidth: elements.printWidth.value,
+      },
+    },
+  })
+  setFeedback('Largura máxima da exportação atualizada.')
+})
+
+function updateInlineItemLimits(): void {
+  applyProjectConfig({
+    ...projectConfig,
+    exportConfig: {
+      ...projectConfig.exportConfig,
+      codeFormat: {
+        ...projectConfig.exportConfig.codeFormat,
+        maxObjectInlineItems: elements.maxObjectInlineItems.value,
+        maxArrayInlineItems: elements.maxArrayInlineItems.value,
+      },
+    },
+  })
+  setFeedback('Limites de coleções inline atualizados.')
+}
+
+elements.maxObjectInlineItems.addEventListener('input', updateInlineItemLimits)
+elements.maxArrayInlineItems.addEventListener('input', updateInlineItemLimits)
+
+function updateCollectionLayouts(): void {
+  applyProjectConfig({
+    ...projectConfig,
+    exportConfig: {
+      ...projectConfig.exportConfig,
+      codeFormat: {
+        ...projectConfig.exportConfig.codeFormat,
+        objectLayout: elements.objectLayout.value,
+        arrayLayout: elements.arrayLayout.value,
+      },
+    },
+  })
+  setFeedback('Layout de objetos e arrays atualizado.')
+}
+
+elements.objectLayout.addEventListener('change', updateCollectionLayouts)
+elements.arrayLayout.addEventListener('change', updateCollectionLayouts)
 
 elements.languageReplacer.addEventListener('input', () => {
   try {

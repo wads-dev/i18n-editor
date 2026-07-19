@@ -19,6 +19,7 @@ export type SourceGenerationOptions = {
   existingLanguageTypeName?: string
   existingPropertyTypes?: Record<string, string>
   existingTypeImports?: Record<string, Array<{ name: string; path: string }>>
+  existingValueImportOrder?: Record<string, string[]>
 }
 
 type ObjectNode = { [key: string]: SourceNode }
@@ -117,6 +118,36 @@ function addCommas(values: string[], codeFormat: I18nCodeFormatConfig): string[]
   })
 }
 
+function renderCompactValue(value: SourceNode, codeFormat: I18nCodeFormatConfig): string | null {
+  if (isTypeReference(value)) return value.$value
+  if (isFunctionDescriptor(value)) return value.source.includes('\n') ? null : value.source
+  if (Array.isArray(value)) {
+    if (codeFormat.arrayLayout === 'multiline') return null
+    if (value.length > codeFormat.maxArrayInlineItems) return null
+    if (value.some((item) => Array.isArray(item) || (isRecord(item) && !isFunctionDescriptor(item) && !isTypeReference(item)))) return null
+    const items = value.map((item) => renderCompactValue(item, codeFormat))
+    if (items.some((item) => item === null)) return null
+    return `[${items.join(', ')}]`
+  }
+  if (isRecord(value)) {
+    if (codeFormat.objectLayout === 'multiline') return null
+    if (Object.keys(value).length > codeFormat.maxObjectInlineItems) return null
+    if (Object.values(value).some((item) => Array.isArray(item) || (isRecord(item) && !isFunctionDescriptor(item) && !isTypeReference(item)))) return null
+    const properties = Object.entries(value).map(([key, item]) => {
+      const renderedValue = renderCompactValue(item as SourceNode, codeFormat)
+      if (renderedValue === null) return null
+      const canUseShorthand = codeFormat.useShorthandProperties
+        && /^[$A-Z_a-z][$\w]*$/.test(key)
+        && renderedValue === key
+      return canUseShorthand ? key : `${propertyName(key, codeFormat)}: ${renderedValue}`
+    })
+    if (properties.some((property) => property === null)) return null
+    return `{ ${properties.join(', ')} }`
+  }
+  if (typeof value === 'string') return quoteString(value, codeFormat)
+  return JSON.stringify(value)
+}
+
 function getTypeName(owner: TranslationOwner, basePath: string, names: Record<string, string>): string {
   return names[basePath] || `${toPascalCase(owner.keyPath)}Translation`
 }
@@ -166,27 +197,39 @@ function renderType(
   return typeof value
 }
 
-function renderValue(value: SourceNode, level: number, codeFormat: I18nCodeFormatConfig): string {
+function renderValue(
+  value: SourceNode,
+  level: number,
+  codeFormat: I18nCodeFormatConfig,
+  currentColumn = 0,
+  allowInline = true,
+): string {
   if (isTypeReference(value)) return value.$value
   if (isFunctionDescriptor(value)) return value.source
   if (Array.isArray(value)) {
     if (value.length === 0) return '[]'
+    const compact = allowInline ? renderCompactValue(value, codeFormat) : null
+    if (compact !== null && currentColumn + compact.length <= codeFormat.printWidth) return compact
     const pad = indent(level, codeFormat)
     const childPad = indent(level + 1, codeFormat)
-    const items = value.map((item) => `${childPad}${renderValue(item, level + 1, codeFormat)}`)
+    const items = value.map((item) => `${childPad}${renderValue(item, level + 1, codeFormat, childPad.length)}`)
     return `[\n${addCommas(items, codeFormat).join('\n')}\n${pad}]`
   }
   if (isRecord(value)) {
     const entries = Object.entries(value)
     if (entries.length === 0) return '{}'
+    const compact = allowInline ? renderCompactValue(value, codeFormat) : null
+    if (compact !== null && currentColumn + compact.length <= codeFormat.printWidth) return compact
     const pad = indent(level, codeFormat)
     const childPad = indent(level + 1, codeFormat)
     const properties = entries.map(([key, item]) => {
-      const renderedValue = renderValue(item as SourceNode, level + 1, codeFormat)
+      const renderedKey = propertyName(key, codeFormat)
+      const valueColumn = childPad.length + renderedKey.length + 2
+      const renderedValue = renderValue(item as SourceNode, level + 1, codeFormat, valueColumn)
       const canUseShorthand = codeFormat.useShorthandProperties
         && /^[$A-Z_a-z][$\w]*$/.test(key)
         && renderedValue === key
-      return `${childPad}${canUseShorthand ? key : `${propertyName(key, codeFormat)}: ${renderedValue}`}`
+      return `${childPad}${canUseShorthand ? key : `${renderedKey}: ${renderedValue}`}`
     })
     return `{\n${addCommas(properties, codeFormat).join('\n')}\n${pad}}`
   }
@@ -203,6 +246,52 @@ function relativeImport(fromFile: string, toFile: string): string {
   }
   const relative = [...fromSegments.map(() => '..'), ...toSegments].join('/')
   return relative.startsWith('.') ? relative : `./${relative}`
+}
+
+function aliasedImport(toFile: string, aliases: Record<string, string>): string | null {
+  const normalizedTarget = toFile.replace(/\.ts$/, '')
+  const match = Object.entries(aliases)
+    .filter(([, target]) => {
+      const prefix = target.replace(/\/$/, '')
+      return normalizedTarget === prefix || normalizedTarget.startsWith(`${prefix}/`)
+    })
+    .sort((left, right) => right[1].length - left[1].length)[0]
+  if (!match) return null
+  const [alias, target] = match
+  const normalizedAlias = alias.endsWith('/') ? alias : `${alias}/`
+  const normalizedPrefix = target.replace(/\/$/, '')
+  const remainder = normalizedTarget.slice(normalizedPrefix.length).replace(/^\//, '')
+  return `${normalizedAlias}${remainder}`
+}
+
+function generatedImport(
+  fromFile: string,
+  toFile: string,
+  owner: TranslationOwner,
+  config: EditorProjectConfig,
+): string {
+  if (owner.importPathStyle === 'alias') {
+    const aliased = aliasedImport(toFile, config.exportConfig.importAliases)
+    if (aliased) return aliased
+  }
+  return relativeImport(fromFile, toFile)
+}
+
+function ownerIdentifier(owner: TranslationOwner): string {
+  return toIdentifier(owner.keyPath.split('.').at(-1) || owner.keyPath)
+}
+
+function orderChildrenByExistingImports(
+  children: TranslationOwner[],
+  childPaths: Map<string, string>,
+  existingOrder: string[] = [],
+): TranslationOwner[] {
+  const ranks = new Map(existingOrder.map((targetPath, index) => [targetPath, index]))
+  return [...children].sort((left, right) => {
+    const leftRank = ranks.get(childPaths.get(left.keyPath) || '') ?? Number.POSITIVE_INFINITY
+    const rightRank = ranks.get(childPaths.get(right.keyPath) || '') ?? Number.POSITIVE_INFINITY
+    return leftRank - rightRank
+  })
 }
 
 function renderBaseFile(
@@ -238,7 +327,7 @@ function renderLanguageFile(
     ...imports.map((item) => `import ${item.name} from ${quoteString(item.path, codeFormat)}`),
     `import type ${typeName} from ${quoteString('./base', codeFormat)}`,
   ].map((line) => terminateStatement(line, codeFormat))
-  const declaration = terminateStatement(`const ${variableName}: ${typeName} = ${renderValue(tree, 0, codeFormat)}`, codeFormat)
+  const declaration = terminateStatement(`const ${variableName}: ${typeName} = ${renderValue(tree, 0, codeFormat, 0, false)}`, codeFormat)
   const exportLine = terminateStatement(`export default ${variableName}`, codeFormat)
   return `${importLines.join('\n')}\n\n${declaration}\n\n${exportLine}\n`
 }
@@ -321,12 +410,12 @@ export function generateSourceFiles(
       const relativeSegments = child.keyPath.slice(owner.keyPath ? owner.keyPath.length + 1 : 0).split('.')
       setAtPath(referenceTree, relativeSegments, {
         $reference: typeNames.get(child.keyPath)!,
-        $value: toIdentifier(child.keyPath),
+        $value: ownerIdentifier(child),
       })
     })
     const generatedBaseImports = ownerChildren.map((child) => ({
       name: typeNames.get(child.keyPath)!,
-      path: relativeImport(basePath, basePaths.get(child.keyPath)!),
+      path: generatedImport(basePath, basePaths.get(child.keyPath)!, child, config),
     }))
     const generatedImportNames = new Set(generatedBaseImports.map((item) => item.name))
     const preservedBaseImports = (options.existingTypeImports?.[basePath] || [])
@@ -353,13 +442,25 @@ export function generateSourceFiles(
         const relativeSegments = child.keyPath.slice(owner.keyPath ? owner.keyPath.length + 1 : 0).split('.')
         setAtPath(tree, relativeSegments, {
           $reference: typeNames.get(child.keyPath)!,
-          $value: toIdentifier(child.keyPath),
+          $value: ownerIdentifier(child),
         })
       })
-      const languageImports = ownerChildren.map((child) => {
+      const childPaths = new Map(ownerChildren.map((child) => {
         const childDirectory = appendPath(child.directory, config.translationsDirectory)
         const childPath = appendPath(childDirectory, config.languageFileTemplate.replaceAll('{language}', filenameValue))
-        return { name: toIdentifier(child.keyPath), path: relativeImport(languagePath, childPath) }
+        return [child.keyPath, childPath] as const
+      }))
+      const orderedChildren = orderChildrenByExistingImports(
+        ownerChildren,
+        childPaths,
+        options.existingValueImportOrder?.[languagePath],
+      )
+      const languageImports = orderedChildren.map((child) => {
+        const childPath = childPaths.get(child.keyPath)!
+        return {
+          name: ownerIdentifier(child),
+          path: generatedImport(languagePath, childPath, child, config),
+        }
       })
       files.push({
         kind: 'language',
