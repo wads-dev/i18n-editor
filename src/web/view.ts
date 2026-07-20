@@ -1,18 +1,26 @@
 import { renderTranslationTables } from './table.js'
 import { createDefaultEditorProjectConfig } from '../core/projectConfig.js'
 
-export function createEditorView({ emptyState, tableWrap, tableContainer, summary, search, onMoveKey, onEditValue }) {
+export function createEditorView({ emptyState, tableWrap, tableContainer, summary, search, onMoveKey, onRemoveKey, onEditValue }) {
   let currentRows = []
   let currentBundle = null
   let projectConfig = createDefaultEditorProjectConfig()
   let usageReport = null
+  let showUnreferenced = false
 
-  search.addEventListener('input', () => {
+  function applyFilters() {
     const query = search.value.trim().toLocaleLowerCase()
     currentRows.forEach((row) => {
-      row.hidden = query !== '' && !row.dataset.search.includes(query)
+      const matchesSearch = query === '' || row.dataset.search.includes(query)
+      const matchesUsage = !showUnreferenced || row.dataset.usageStatus === 'unreferenced'
+      row.hidden = !matchesSearch || !matchesUsage
     })
-  })
+    tableContainer.querySelectorAll('.table-group, .translation-group').forEach((group) => {
+      group.hidden = group.querySelector('tbody tr:not([hidden])') === null
+    })
+  }
+
+  search.addEventListener('input', applyFilters)
 
   return {
     render(bundle) {
@@ -30,12 +38,13 @@ export function createEditorView({ emptyState, tableWrap, tableContainer, summar
         projectConfig,
         usageReport,
         onMoveKey,
+        onRemoveKey,
         onEditValue,
       })
       currentRows = [...tableContainer.querySelectorAll('tbody tr')]
       emptyState.hidden = true
       tableWrap.hidden = false
-      search.value = ''
+      applyFilters()
       summary.textContent = `${keyCount} chaves em ${Object.keys(bundle.languages).length} idiomas.`
     },
     setProjectConfig(nextProjectConfig) {
@@ -45,6 +54,10 @@ export function createEditorView({ emptyState, tableWrap, tableContainer, summar
     setUsageReport(nextUsageReport) {
       usageReport = nextUsageReport
       if (currentBundle) this.render(currentBundle)
+    },
+    setShowUnreferenced(value) {
+      showUnreferenced = value
+      applyFilters()
     },
   }
 }

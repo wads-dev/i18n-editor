@@ -156,6 +156,14 @@
           </div>
           <div class="translation-actions">
             <button id="analyze-usage" class="secondary-button" type="button" disabled>Analisar usos</button>
+            <label class="usage-filter" for="show-unreferenced">
+              <input id="show-unreferenced" type="checkbox" disabled>
+              <span>Somente não referenciadas</span>
+            </label>
+            <label class="visual-level-field" for="visual-level-count">
+              <span>Níveis na visualização</span>
+              <input id="visual-level-count" type="number" min="0" max="12" step="1" value="2">
+            </label>
             <label class="search-field" for="translation-search">
               <span>Buscar</span>
               <input id="translation-search" type="search" placeholder="Chave ou tradução">

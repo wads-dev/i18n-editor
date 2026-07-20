@@ -2,6 +2,8 @@ import type { I18nBundle } from '@wads.dev/i18n-ts/bundle'
 import type { TranslationUsageEntry, TranslationUsageReport } from '../core/projectApi.js'
 import { getEditorLevelName, type EditorProjectConfig } from '../core/projectConfig.js'
 
+let activeUsagePopover: { element: HTMLElement; trigger: HTMLButtonElement; close: () => void } | null = null
+
 function isFunctionDescriptor(value) {
   return value && typeof value === 'object' && value.$type === 'function'
 }
@@ -64,20 +66,36 @@ function createUsageCell(document: Document, usage: TranslationUsageEntry | unde
     cell.textContent = 'Não analisado'
     return cell
   }
-  const details = document.createElement('details')
-  details.className = `usage-details usage-${usage.status}`
-  const summary = document.createElement('summary')
-  summary.textContent = usage.status === 'uncertain'
-    ? `${usage.uncertainReferenceCount} incerto${usage.uncertainReferenceCount === 1 ? '' : 's'} · ${usage.fileCount} arq.`
+  const trigger = document.createElement('button')
+  trigger.type = 'button'
+  trigger.className = `usage-trigger usage-${usage.status}`
+  trigger.setAttribute('aria-expanded', 'false')
+  const count = document.createElement('span')
+  count.textContent = usage.status === 'uncertain'
+    ? `⚠ ${usage.uncertainReferenceCount} incerto${usage.uncertainReferenceCount === 1 ? '' : 's'} · ${usage.fileCount} arq.`
     : `${usage.referenceCount} ref${usage.referenceCount === 1 ? '' : 's'} · ${usage.fileCount} arq.`
-  details.append(summary)
+  const action = document.createElement('span')
+  action.className = 'usage-trigger-action'
+  action.textContent = 'Ver detalhes'
+  trigger.append(count, action)
+
   const references = document.createElement('div')
-  references.className = 'usage-references'
+  references.className = `usage-popover usage-popover-${usage.status}`
+  references.setAttribute('role', 'dialog')
+  const title = document.createElement('strong')
+  title.textContent = usage.status === 'uncertain'
+    ? 'Referências potencialmente alcançáveis'
+    : usage.status === 'unreferenced'
+      ? 'Sem referências estáticas'
+      : 'Referências encontradas'
+  references.append(title)
   const displayedReferences = usage.status === 'uncertain' ? usage.uncertainReferences : usage.references
   if (displayedReferences.length === 0) {
-    references.textContent = usage.status === 'uncertain'
+    const empty = document.createElement('span')
+    empty.textContent = usage.status === 'uncertain'
       ? 'Um acesso dinâmico pode alcançar esta chave.'
       : 'Nenhuma referência estática encontrada.'
+    references.append(empty)
   } else {
     displayedReferences.forEach((reference) => {
       const location = document.createElement('code')
@@ -85,8 +103,63 @@ function createUsageCell(document: Document, usage: TranslationUsageEntry | unde
       references.append(location)
     })
   }
-  details.append(references)
-  cell.append(details)
+
+  trigger.addEventListener('click', () => {
+    if (activeUsagePopover?.trigger === trigger) {
+      activeUsagePopover.close()
+      return
+    }
+    activeUsagePopover?.close()
+    const view = document.defaultView
+    if (!view) return
+    document.body.append(references)
+    trigger.setAttribute('aria-expanded', 'true')
+
+    const position = () => {
+      const triggerRect = trigger.getBoundingClientRect()
+      const popoverRect = references.getBoundingClientRect()
+      const margin = 12
+      const left = Math.min(
+        Math.max(margin, triggerRect.left),
+        Math.max(margin, view.innerWidth - popoverRect.width - margin),
+      )
+      const below = triggerRect.bottom + 8
+      const top = below + popoverRect.height <= view.innerHeight - margin
+        ? below
+        : Math.max(margin, triggerRect.top - popoverRect.height - 8)
+      references.style.left = `${left}px`
+      references.style.top = `${top}px`
+    }
+
+    const close = () => {
+      references.remove()
+      trigger.setAttribute('aria-expanded', 'false')
+      document.removeEventListener('pointerdown', closeOnOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+      view.removeEventListener('resize', close)
+      view.removeEventListener('scroll', close, true)
+      if (activeUsagePopover?.trigger === trigger) activeUsagePopover = null
+    }
+    const closeOnOutside = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (!target || references.contains(target) || trigger.contains(target)) return
+      close()
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        close()
+        trigger.focus()
+      }
+    }
+
+    activeUsagePopover = { element: references, trigger, close }
+    position()
+    document.addEventListener('pointerdown', closeOnOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    view.addEventListener('resize', close)
+    view.addEventListener('scroll', close, true)
+  })
+  cell.append(trigger)
   return cell
 }
 
@@ -174,7 +247,7 @@ function getRelativeKey(fullKey, depth) {
   return fullKey.split('.').slice(depth).join('.')
 }
 
-function createTranslationTable(document, languages, rows, depth, { onMoveKey, onEditValue, usageReport }) {
+function createTranslationTable(document, languages, rows, depth, { onMoveKey, onRemoveKey, onEditValue, usageReport }) {
   const table = document.createElement('table')
   const header = table.createTHead().insertRow()
   const keyHeader = document.createElement('th')
@@ -204,12 +277,37 @@ function createTranslationTable(document, languages, rows, depth, { onMoveKey, o
       fullKey,
       ...languageEntries.map((entry) => entry?.text ?? ''),
     ].join(' ').toLocaleLowerCase()
+    row.dataset.usageStatus = usageReport?.entries[fullKey]?.status || 'not-analyzed'
 
-    const keyCell = createCell(document, getRelativeKey(fullKey, depth), 'key')
+    const keyCell = document.createElement('td')
+    keyCell.className = 'key'
+    const keyContent = document.createElement('div')
+    keyContent.className = 'key-content'
+    const keyLabel = document.createElement('span')
+    keyLabel.textContent = getRelativeKey(fullKey, depth)
     if (onMoveKey) {
       keyCell.title = 'Clique duas vezes para mover esta chave'
       keyCell.addEventListener('dblclick', () => onMoveKey(fullKey))
     }
+    if (onRemoveKey) {
+      const removeButton = document.createElement('button')
+      removeButton.type = 'button'
+      removeButton.className = [
+        'remove-key-button',
+        usageReport?.entries[fullKey]?.status === 'unreferenced' ? 'remove-key-button-unreferenced' : '',
+      ].filter(Boolean).join(' ')
+      removeButton.title = `Remover ${fullKey}`
+      removeButton.setAttribute('aria-label', `Remover a chave ${fullKey}`)
+      removeButton.textContent = '×'
+      removeButton.addEventListener('click', (event) => {
+        event.stopPropagation()
+        onRemoveKey(fullKey)
+      })
+      removeButton.addEventListener('dblclick', (event) => event.stopPropagation())
+      keyContent.append(removeButton)
+    }
+    keyContent.append(keyLabel)
+    keyCell.append(keyContent)
     row.append(keyCell)
     row.append(createUsageCell(document, usageReport?.entries[fullKey]))
 
@@ -290,21 +388,23 @@ type RenderTranslationOptions = {
   projectConfig: EditorProjectConfig
   usageReport?: TranslationUsageReport | null
   onMoveKey?: (sourceKey: string) => void
+  onRemoveKey?: (key: string) => void
   onEditValue?: (change: { languageKey: string; key: string; value: string }) => boolean
 }
 
 export function renderTranslationTables(
   container: HTMLElement,
   bundle: I18nBundle,
-  { projectConfig, usageReport, onMoveKey, onEditValue }: RenderTranslationOptions,
+  { projectConfig, usageReport, onMoveKey, onRemoveKey, onEditValue }: RenderTranslationOptions,
 ) {
+  activeUsagePopover?.close()
   const document = container.ownerDocument
   const { languages, rows } = createRows(bundle)
   const normalizedLevelCount = Math.max(0, Number.isInteger(projectConfig?.levelCount) ? projectConfig.levelCount : 0)
   const tree = createGroupTree(rows, normalizedLevelCount)
   const fragment = document.createDocumentFragment()
 
-  appendTableGroup(document, fragment, tree, languages, { projectConfig, usageReport, onMoveKey, onEditValue }, true)
+  appendTableGroup(document, fragment, tree, languages, { projectConfig, usageReport, onMoveKey, onRemoveKey, onEditValue }, true)
   container.replaceChildren(fragment)
   return rows.length
 }

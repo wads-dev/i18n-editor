@@ -1,6 +1,6 @@
 {
   "name": "@wads.dev/i18n-editor",
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.1-beta.0",
   "description": "Local web editor for typed i18n projects.",
   "license": "MIT",
   "author": {
@@ -18,8 +18,8 @@
     "LICENSE"
   ],
   "bin": {
-    "i18n-edit": "./dist/cli/index.js",
-    "i18n-editor": "./dist/cli/index.js"
+    "i18n-edit": "dist/cli/index.js",
+    "i18n-editor": "dist/cli/index.js"
   },
   "engines": {
     "node": ">=20"

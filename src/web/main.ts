@@ -5,6 +5,7 @@ import {
   saveStoredProjectConfig,
 } from './bundle-storage.js'
 import { moveKey } from '../core/moveKey.js'
+import { removeKey } from '../core/removeKey.js'
 import { createDefaultEditorProjectConfig, normalizeEditorProjectConfig } from '../core/projectConfig.js'
 import { setStringValue } from '../core/setStringValue.js'
 import { renderExportPreview } from './export-preview.js'
@@ -12,7 +13,7 @@ import { renderLevelImportFields } from './project-settings.js'
 import { analyzeProjectUsage, checkProjectExport, exportProject, generateProjectBundle, getProjectInfo } from './project-api.js'
 import { createEditorState } from './state.js'
 import { createEditorView } from './view.js'
-import type { ProjectExportPreviewChange } from '../core/projectApi.js'
+import type { ProjectExportPreviewChange, TranslationUsageReport } from '../core/projectApi.js'
 
 const state = createEditorState()
 
@@ -60,12 +61,48 @@ const elements = {
   projectStatusText: getElement<HTMLElement>('#project-status-text'),
   retryProjectLoad: getElement<HTMLButtonElement>('#retry-project-load'),
   analyzeUsage: getElement<HTMLButtonElement>('#analyze-usage'),
+  showUnreferenced: getElement<HTMLInputElement>('#show-unreferenced'),
+  visualLevelCount: getElement<HTMLInputElement>('#visual-level-count'),
 }
 
 let settingsPanelVisible = false
 let projectConfig = createDefaultEditorProjectConfig()
 let checkedExportChanges: ProjectExportPreviewChange[] | null = null
 let exportPreviewRequestVersion = 0
+let visualLevelCountOverride: number | null = null
+let currentUsageReport: TranslationUsageReport | null = null
+
+function replaceUsageReport(report: TranslationUsageReport | null): void {
+  currentUsageReport = report
+  view.setUsageReport(report)
+  elements.showUnreferenced.disabled = report === null
+  if (report === null) {
+    view.setShowUnreferenced(false)
+    elements.showUnreferenced.checked = false
+  }
+}
+
+function remapUsageKey(sourceKey: string, targetKey: string): void {
+  if (!currentUsageReport) return
+  const entries = Object.fromEntries(Object.entries(currentUsageReport.entries).map(([key, usage]) => {
+    if (key === sourceKey) return [targetKey, usage]
+    if (key.startsWith(`${sourceKey}.`) || key.startsWith(`${sourceKey}[`)) {
+      return [`${targetKey}${key.slice(sourceKey.length)}`, usage]
+    }
+    return [key, usage]
+  }))
+  replaceUsageReport({ ...currentUsageReport, entries })
+}
+
+function removeUsageKey(keyToRemove: string): void {
+  if (!currentUsageReport) return
+  const entries = Object.fromEntries(Object.entries(currentUsageReport.entries).filter(([key]) => {
+    return key !== keyToRemove
+      && !key.startsWith(`${keyToRemove}.`)
+      && !key.startsWith(`${keyToRemove}[`)
+  }))
+  replaceUsageReport({ ...currentUsageReport, entries })
+}
 
 function renderCurrentExportPreview() {
   renderExportPreview(elements.exportPreview, state.getBundle(), projectConfig, checkedExportChanges)
@@ -83,9 +120,9 @@ function invalidateExportPreview() {
 }
 
 function invalidateUsageAnalysis(message = ''): void {
-  view.setUsageReport(null)
+  view.setUsageReport(currentUsageReport)
   elements.analyzeUsage.disabled = !state.getBundle()
-  elements.analyzeUsage.textContent = 'Analisar usos'
+  elements.analyzeUsage.textContent = currentUsageReport ? 'Analisar novamente' : 'Analisar usos'
   if (message) setFeedback(message)
 }
 
@@ -101,7 +138,18 @@ const view = createEditorView({
 
     try {
       state.update((bundle) => moveKey(bundle, { sourceKey, targetKey: targetKey.trim() }))
+      remapUsageKey(sourceKey, targetKey.trim())
       setFeedback(`Chave movida de ${sourceKey} para ${targetKey.trim()}.`)
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : String(error), true)
+    }
+  },
+  onRemoveKey(key) {
+    if (!window.confirm(`Remover a chave "${key}" de todos os idiomas?\n\nA alteração ficará somente na bundle em memória até você exportar para o projeto.`)) return
+    try {
+      state.update((bundle) => removeKey(bundle, { key }))
+      removeUsageKey(key)
+      setFeedback(`Chave ${key} removida de todos os idiomas. Exporte para aplicar a alteração no projeto.`)
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : String(error), true)
     }
@@ -192,7 +240,11 @@ function applyProjectConfig(nextConfig, persist = true, renderLevelImports = tru
       }
     })
   }
-  view.setProjectConfig(projectConfig)
+  if (visualLevelCountOverride === null) elements.visualLevelCount.value = String(projectConfig.levelCount)
+  view.setProjectConfig({
+    ...projectConfig,
+    levelCount: visualLevelCountOverride ?? projectConfig.levelCount,
+  })
   invalidateUsageAnalysis()
   invalidateExportPreview()
 
@@ -236,7 +288,7 @@ elements.analyzeUsage.addEventListener('click', async () => {
   setFeedback('Analisando referências tipadas no projeto…')
   try {
     const report = await analyzeProjectUsage(bundle, projectConfig)
-    view.setUsageReport(report)
+    replaceUsageReport(report)
     const usages = Object.values(report.entries)
     const used = usages.filter(({ status }) => status === 'used').length
     const uncertain = usages.filter(({ status }) => status === 'uncertain').length
@@ -248,6 +300,17 @@ elements.analyzeUsage.addEventListener('click', async () => {
     elements.analyzeUsage.disabled = !state.getBundle()
     elements.analyzeUsage.textContent = 'Analisar novamente'
   }
+})
+
+elements.showUnreferenced.addEventListener('change', () => {
+  view.setShowUnreferenced(elements.showUnreferenced.checked)
+})
+
+elements.visualLevelCount.addEventListener('input', () => {
+  const parsed = Number.parseInt(elements.visualLevelCount.value, 10)
+  visualLevelCountOverride = Number.isFinite(parsed) ? Math.min(12, Math.max(0, parsed)) : 0
+  elements.visualLevelCount.value = String(visualLevelCountOverride)
+  view.setProjectConfig({ ...projectConfig, levelCount: visualLevelCountOverride })
 })
 
 elements.checkExportDiffs.addEventListener('click', async () => {

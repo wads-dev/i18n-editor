@@ -48,16 +48,26 @@ export function getKeyPathValue(root: unknown, segments: KeyPathSegment[]): KeyP
 }
 
 export function deleteKeyPathValue(root: MutableContainer, segments: KeyPathSegment[]): void {
-  const parentPath = segments.slice(0, -1)
-  const property = segments.at(-1)!
+  const containers: Array<{ container: MutableContainer; segment: KeyPathSegment }> = []
   let parent: MutableContainer = root
 
-  for (const segment of parentPath) {
+  for (const segment of segments.slice(0, -1)) {
+    containers.push({ container: parent, segment })
     const nested = asRecord(parent)[segment]
     if (!isContainer(nested)) throw new Error(`The key path is invalid at ${String(segment)}.`)
     parent = nested
   }
-  delete asRecord(parent)[property]
+  const property = segments.at(-1)!
+  if (Array.isArray(parent) && typeof property === 'number') parent.splice(property, 1)
+  else delete asRecord(parent)[property]
+
+  for (let index = containers.length - 1; index >= 0; index -= 1) {
+    const { container, segment } = containers[index]!
+    const child = asRecord(container)[segment]
+    if (!isContainer(child) || Object.keys(child).length > 0) break
+    if (Array.isArray(container) && typeof segment === 'number') container.splice(segment, 1)
+    else delete asRecord(container)[segment]
+  }
 }
 
 export function setKeyPathValue(
