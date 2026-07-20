@@ -1,6 +1,11 @@
 import { getDefaultLevelImport } from '@wads.dev/i18n-ts/config'
 import { getEditorLevelName } from '../core/projectConfig.js'
 
+function getDisplayLevelName(config, index) {
+  const configured = getEditorLevelName(config, index)
+  return configured === `Level ${index}` ? Lang.common.level(index) : configured
+}
+
 function createJsonField(document, { labelText, value, placeholder, onInput }) {
   const label = document.createElement('label')
   label.className = 'level-field level-json-field'
@@ -28,12 +33,14 @@ export function renderLevelImportFields(container, config, onChange) {
     card.className = 'level-import-card'
 
     const heading = document.createElement('h4')
-    heading.textContent = index === 0 ? 'Root (level 0)' : `${getEditorLevelName(config, index)} (level ${index})`
+    heading.textContent = index === 0
+      ? `${Lang.common.root} (${Lang.common.level(0).toLocaleLowerCase()})`
+      : `${getDisplayLevelName(config, index)} (${Lang.common.level(index).toLocaleLowerCase()})`
 
     const pathLabel = document.createElement('label')
     pathLabel.className = 'level-field level-path-field'
     const pathTitle = document.createElement('span')
-    pathTitle.textContent = 'Template do caminho'
+    pathTitle.textContent = Lang.settings.pathTemplate
     const pathInput = document.createElement('input')
     pathInput.type = 'text'
     pathInput.value = levelImport.path
@@ -47,13 +54,13 @@ export function renderLevelImportFields(container, config, onChange) {
       replacers.className = 'level-replacers'
       replacers.append(
         createJsonField(document, {
-          labelText: 'Value replacer (JSON)',
+          labelText: `${Lang.settings.valueReplacer} (JSON)`,
           value: levelImport.valueReplacer,
           placeholder: '{ "module.feature": "folder-name" }',
           onInput: (value) => onChange(index, 'valueReplacer', value),
         }),
         createJsonField(document, {
-          labelText: 'Full replacer (JSON)',
+          labelText: `${Lang.settings.fullReplacer} (JSON)`,
           value: levelImport.fullReplacer,
           placeholder: '{ "module.feature": "@/custom/path" }',
           onInput: (value) => onChange(index, 'fullReplacer', value),

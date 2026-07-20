@@ -16,6 +16,8 @@ The package compiles the browser editor and its reusable operations from TypeScr
 
 The Editor consumes the bundle and `i18n.config.json` formats defined by `i18n-ts`. It is framework-independent: React projects may use `i18n-react`, but the Editor does not require it.
 
+The interface itself uses the `i18n-ts` runtime with a zero-level English and Portuguese catalog. The browser locale selects the initial language, and the explicit choice is persisted locally for future sessions. The runtime bootstrap exposes the selected, deeply frozen tree as the typed global `Lang`, so editor modules access translations without importing the catalog.
+
 ## Development
 
 ```sh

@@ -4,6 +4,11 @@ import { getEditorLevelName, type EditorProjectConfig } from '../core/projectCon
 
 let activeUsagePopover: { element: HTMLElement; trigger: HTMLButtonElement; close: () => void } | null = null
 
+function getDisplayLevelName(config: EditorProjectConfig, level: number): string {
+  const configured = getEditorLevelName(config, level)
+  return configured === `Level ${level}` ? Lang.common.level(level) : configured
+}
+
 function isFunctionDescriptor(value) {
   return value && typeof value === 'object' && value.$type === 'function'
 }
@@ -20,12 +25,12 @@ function splitFunctionSource(source) {
 
 function describeBase(entries) {
   const presentEntries = entries.filter(Boolean)
-  if (presentEntries.length === 0) return { label: 'missing', type: 'missing' }
+  if (presentEntries.length === 0) return { label: Lang.editor.missing, type: 'missing' }
   if (presentEntries.every((entry) => entry.type === 'string')) return { label: 'string', type: 'string' }
   if (presentEntries.every((entry) => entry.type === 'function')) {
     return { label: presentEntries[0].signature, type: 'function' }
   }
-  return { label: 'inconsistent', type: 'inconsistent' }
+  return { label: Lang.editor.inconsistent, type: 'inconsistent' }
 }
 
 function appendSegment(path, segment) {
@@ -63,7 +68,7 @@ function createUsageCell(document: Document, usage: TranslationUsageEntry | unde
   cell.className = 'usage-cell'
   if (!usage) {
     cell.classList.add('usage-empty')
-    cell.textContent = 'Not analyzed'
+    cell.textContent = Lang.editor.notAnalyzed
     return cell
   }
   const trigger = document.createElement('button')
@@ -71,12 +76,14 @@ function createUsageCell(document: Document, usage: TranslationUsageEntry | unde
   trigger.className = `usage-trigger usage-${usage.status}`
   trigger.setAttribute('aria-expanded', 'false')
   const count = document.createElement('span')
-  count.textContent = usage.status === 'uncertain'
-    ? `⚠ ${usage.uncertainReferenceCount} uncertain · ${usage.fileCount} file${usage.fileCount === 1 ? '' : 's'}`
-    : `${usage.referenceCount} ref${usage.referenceCount === 1 ? '' : 's'} · ${usage.fileCount} file${usage.fileCount === 1 ? '' : 's'}`
+  count.textContent = Lang.editor.usageSummary(
+    usage.status === 'uncertain' ? usage.uncertainReferenceCount : usage.referenceCount,
+    usage.fileCount,
+    usage.status === 'uncertain',
+  )
   const action = document.createElement('span')
   action.className = 'usage-trigger-action'
-  action.textContent = 'View details'
+  action.textContent = Lang.editor.viewDetails
   trigger.append(count, action)
 
   const references = document.createElement('div')
@@ -84,17 +91,17 @@ function createUsageCell(document: Document, usage: TranslationUsageEntry | unde
   references.setAttribute('role', 'dialog')
   const title = document.createElement('strong')
   title.textContent = usage.status === 'uncertain'
-    ? 'Potentially reachable references'
+    ? Lang.editor.potentiallyReachable
     : usage.status === 'unreferenced'
-      ? 'No static references'
-      : 'References found'
+      ? Lang.editor.noStaticReferences
+      : Lang.editor.referencesFound
   references.append(title)
   const displayedReferences = usage.status === 'uncertain' ? usage.uncertainReferences : usage.references
   if (displayedReferences.length === 0) {
     const empty = document.createElement('span')
     empty.textContent = usage.status === 'uncertain'
-      ? 'A dynamic access may reach this key.'
-      : 'No static references were found.'
+      ? Lang.editor.dynamicMayReach
+      : Lang.editor.noExactReferences
     references.append(empty)
   } else {
     displayedReferences.forEach((reference) => {
@@ -169,7 +176,7 @@ function beginTextEdit(cell, originalValue, onCommit) {
   input.className = 'inline-value-input'
   input.type = 'text'
   input.value = originalValue
-  input.setAttribute('aria-label', 'Edit translation')
+  input.setAttribute('aria-label', Lang.editor.editTranslation)
 
   function finish(save) {
     if (completed) return
@@ -251,11 +258,11 @@ function createTranslationTable(document, languages, rows, depth, { onMoveKey, o
   const table = document.createElement('table')
   const header = table.createTHead().insertRow()
   const keyHeader = document.createElement('th')
-  keyHeader.textContent = 'Chave'
+  keyHeader.textContent = Lang.editor.key
   header.append(keyHeader)
 
   const usageHeader = document.createElement('th')
-  usageHeader.textContent = 'Usos'
+  usageHeader.textContent = Lang.editor.usages
   header.append(usageHeader)
 
   languages.forEach(([key, language]) => {
@@ -266,7 +273,7 @@ function createTranslationTable(document, languages, rows, depth, { onMoveKey, o
   })
 
   const baseHeader = document.createElement('th')
-  baseHeader.textContent = 'Base'
+  baseHeader.textContent = Lang.editor.base
   header.append(baseHeader)
 
   const body = table.createTBody()
@@ -286,7 +293,7 @@ function createTranslationTable(document, languages, rows, depth, { onMoveKey, o
     const keyLabel = document.createElement('span')
     keyLabel.textContent = getRelativeKey(fullKey, depth)
     if (onMoveKey) {
-      keyCell.title = 'Double-click to move this key'
+      keyCell.title = Lang.editor.doubleClickMove
       keyCell.addEventListener('dblclick', () => onMoveKey(fullKey))
     }
     if (onRemoveKey) {
@@ -296,8 +303,8 @@ function createTranslationTable(document, languages, rows, depth, { onMoveKey, o
         'remove-key-button',
         usageReport?.entries[fullKey]?.status === 'unreferenced' ? 'remove-key-button-unreferenced' : '',
       ].filter(Boolean).join(' ')
-      removeButton.title = `Remove ${fullKey}`
-      removeButton.setAttribute('aria-label', `Remove key ${fullKey}`)
+      removeButton.title = Lang.editor.removeKey(fullKey)
+      removeButton.setAttribute('aria-label', Lang.editor.removeKey(fullKey))
       removeButton.textContent = '×'
       removeButton.addEventListener('click', (event) => {
         event.stopPropagation()
@@ -316,9 +323,9 @@ function createTranslationTable(document, languages, rows, depth, { onMoveKey, o
       const className = ['language-value', entry?.type === 'function' ? 'function-value' : '']
         .filter(Boolean)
         .join(' ')
-      const valueCell = createCell(document, entry?.text ?? 'Missing', className)
+      const valueCell = createCell(document, entry?.text ?? Lang.editor.missing, className)
       if (entry?.type === 'string' && onEditValue) {
-        valueCell.title = 'Double-click to edit this translation'
+        valueCell.title = Lang.editor.doubleClickEdit
         valueCell.addEventListener('dblclick', () => {
           beginTextEdit(valueCell, entry.text, (value) => onEditValue({
             languageKey,
@@ -344,7 +351,7 @@ function appendTableGroup(document, container, node, languages, callbacks, isRoo
       rootGroup.className = 'table-group'
       const title = document.createElement('h3')
       title.className = 'table-group-title'
-      title.textContent = 'Root'
+      title.textContent = Lang.common.root
       rootGroup.append(title, createTranslationTable(document, languages, node.rows, node.depth, callbacks))
       container.append(rootGroup)
     }
@@ -353,10 +360,10 @@ function appendTableGroup(document, container, node, languages, callbacks, isRoo
     details.className = 'translation-group'
     const summary = document.createElement('summary')
     const label = document.createElement('span')
-    label.textContent = `${getEditorLevelName(callbacks.projectConfig, node.depth)} · ${node.name}`
+    label.textContent = `${getDisplayLevelName(callbacks.projectConfig, node.depth)} · ${node.name}`
     const count = document.createElement('span')
     count.className = 'group-count'
-    count.textContent = `${getNodeRowCount(node)} keys`
+    count.textContent = Lang.common.keys(getNodeRowCount(node))
     summary.append(label, count)
     details.append(summary)
 
@@ -368,7 +375,7 @@ function appendTableGroup(document, container, node, languages, callbacks, isRoo
       if (node.children.size > 0) {
         const title = document.createElement('h3')
         title.className = 'table-group-title'
-        title.textContent = 'Root'
+        title.textContent = Lang.common.root
         tableGroup.append(title)
       }
       tableGroup.append(createTranslationTable(document, languages, node.rows, node.depth, callbacks))

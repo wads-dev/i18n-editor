@@ -1,12 +1,5 @@
 import { buildExportPlan } from '../core/exportPlan.js'
 
-const statusLabels = {
-  create: 'new',
-  modify: 'modified',
-  unchanged: 'unchanged',
-  delete: 'delete',
-}
-
 function createDiff(document, diff) {
   const pre = document.createElement('pre')
   pre.className = 'export-file-diff'
@@ -31,13 +24,13 @@ export function renderExportPreview(container, bundle, config, checkedChanges = 
   const document = container.ownerDocument
 
   if (!bundle) {
-    container.textContent = 'Load a bundle to preview output files.'
+    container.textContent = Lang.exportPreview.loadBundle
     return
   }
 
   const plan = checkedChanges ?? buildExportPlan(bundle, config)
   if (plan.length === 0) {
-    container.textContent = 'There are no translations to export.'
+    container.textContent = Lang.exportPreview.noTranslations
     return
   }
 
@@ -51,7 +44,7 @@ export function renderExportPreview(container, bundle, config, checkedChanges = 
     if (status) {
       const badge = document.createElement('span')
       badge.className = 'export-preview-status'
-      badge.textContent = statusLabels[status]
+      badge.textContent = Lang.exportPreview.status[status]
       line.append(badge)
     }
     const code = document.createElement('code')
@@ -62,7 +55,7 @@ export function renderExportPreview(container, bundle, config, checkedChanges = 
       const details = document.createElement('details')
       details.className = 'export-diff-details'
       const summary = document.createElement('summary')
-      summary.textContent = 'Show diff'
+      summary.textContent = Lang.exportPreview.showDiff
       details.append(summary, createDiff(document, diff))
       item.append(details)
     }

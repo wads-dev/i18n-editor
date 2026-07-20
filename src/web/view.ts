@@ -28,7 +28,7 @@ export function createEditorView({ emptyState, tableWrap, tableContainer, summar
       if (!bundle) {
         emptyState.hidden = false
         tableWrap.hidden = true
-        summary.textContent = 'Load a bundle to view translations.'
+        summary.textContent = Lang.editor.emptySummary
         search.value = ''
         currentRows = []
         return
@@ -45,7 +45,7 @@ export function createEditorView({ emptyState, tableWrap, tableContainer, summar
       emptyState.hidden = true
       tableWrap.hidden = false
       applyFilters()
-      summary.textContent = `${keyCount} keys across ${Object.keys(bundle.languages).length} languages.`
+      summary.textContent = Lang.editor.bundleSummary(keyCount, Object.keys(bundle.languages).length)
     },
     setProjectConfig(nextProjectConfig) {
       projectConfig = nextProjectConfig

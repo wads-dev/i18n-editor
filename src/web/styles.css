@@ -23,6 +23,8 @@ button, input, textarea { font: inherit; }
 .page { width: calc(100% - 40px); margin: 44px auto; }
 .page-header { max-width: 720px; margin-bottom: 28px; }
 .page-title-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.language-field { display: grid; gap: 3px; margin-left: auto; color: var(--muted); font-size: 10px; font-weight: 750; }
+.language-field select { padding: 6px 24px 6px 8px; border: 1px solid #c8cfdd; border-radius: 8px; color: var(--ink); background: #fff; font: inherit; font-size: 12px; }
 .eyebrow { margin: 0 0 5px; color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 8px; font-size: clamp(30px, 5vw, 46px); letter-spacing: -.045em; line-height: 1.05; }
@@ -160,6 +162,7 @@ tr[hidden] { display: none; }
 @media (max-width: 720px) {
   .page { width: min(100% - 24px, 1500px); margin: 24px auto; }
   .report-header { align-items: flex-start; flex-direction: column; }
+  .page-title-row { align-items: flex-start; flex-wrap: wrap; }
   .translation-actions { width: 100%; align-items: stretch; flex-direction: column; }
   .export-preview-header { flex-direction: column; }
   .export-diff-details { margin-left: 0; }

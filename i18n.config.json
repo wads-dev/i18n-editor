@@ -1,0 +1,37 @@
+{
+  "format": "wads-i18n-project-config",
+  "version": 1,
+  "catalogFile": "src/web/i18n/index.ts",
+  "levelCount": 0,
+  "levelNames": "",
+  "levelImports": [
+    {
+      "path": "src/web"
+    }
+  ],
+  "translationsDirectory": "i18n",
+  "languageFileTemplate": "{language}.ts",
+  "exportConfig": {
+    "importAliases": {},
+    "codeFormat": {
+      "useDoubleQuotes": false,
+      "useSemicolons": false,
+      "useShorthandProperties": true,
+      "useTrailingCommas": true,
+      "printWidth": 120,
+      "maxObjectInlineItems": 4,
+      "maxArrayInlineItems": 8,
+      "objectLayout": "fit",
+      "arrayLayout": "fit",
+      "indentation": {
+        "character": "space",
+        "size": 2
+      }
+    }
+  },
+  "languageReplacer": {},
+  "deletion": {
+    "ignoredExtensions": [],
+    "autoDelete": false
+  }
+}

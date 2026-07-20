@@ -6,6 +6,7 @@ The Editor is a local Node.js application with a browser interface. The publishe
 
 - `src/core/` contains environment-neutral editing and export-plan operations. It is strict TypeScript and may be consumed by the browser or future server routes.
 - `src/web/` contains the browser interface. It is bundled into `dist/public/editor.js`.
+- `src/web/i18n/` is the Editor's own zero-level English and Portuguese catalog. `src/web/language.ts` is the only module that imports the runtime language loader. It publishes the deeply frozen, typed translation tree as `globalThis.Lang`; browser modules consume the declared global directly instead of importing the catalog.
 - `src/server/` owns the local Fastify server. It must bind to loopback by default.
 - `src/cli/` owns process lifecycle and declares commands and options through Commander. Commander owns parsing, validation and generated help. The emitted entry point is the package executable.
 - `scripts/` contains deterministic build support only.
