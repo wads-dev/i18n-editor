@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import ts from 'typescript'
 import type { I18nBundle } from '@wads.dev/i18n-ts/bundle'
+import { collectHtmlI18nReferences } from '@wads.dev/i18n-html/usage'
 
 import { buildTranslationOwners } from '../core/exportPlan.js'
 import type { EditorProjectConfig } from '../core/projectConfig.js'
@@ -130,10 +131,12 @@ function isInside(filePath: string, directory: string): boolean {
 }
 
 function findRootInterface(sourceFile: ts.SourceFile): ts.InterfaceDeclaration | undefined {
-  return sourceFile.statements.find((statement): statement is ts.InterfaceDeclaration => {
+  const interfaces = sourceFile.statements.filter((statement): statement is ts.InterfaceDeclaration => {
     return ts.isInterfaceDeclaration(statement)
-      && statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword) === true
   })
+  return interfaces.find((statement) => {
+    return statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword) === true
+  }) || interfaces[0]
 }
 
 function getTypeSymbol(type: ts.Type): ts.Symbol | undefined {
@@ -245,11 +248,18 @@ export function analyzeTranslationUsage({
   function addReference(key: string, node: ts.Node): void {
     const sourceFile = node.getSourceFile()
     const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
-    references.get(key)?.push({
+    addReferenceLocation(key, {
       file: normalizePath(path.relative(projectDirectory, sourceFile.fileName)),
       line: position.line + 1,
       column: position.character + 1,
     })
+  }
+
+  function addReferenceLocation(key: string, reference: TranslationUsageEntry['references'][number]): void {
+    const entries = references.get(key)
+    if (!entries?.some((entry) => entry.file === reference.file
+      && entry.line === reference.line
+      && entry.column === reference.column)) entries?.push(reference)
   }
 
   function locationFor(node: ts.Node): TranslationUsageEntry['references'][number] {
@@ -348,6 +358,15 @@ export function analyzeTranslationUsage({
     .filter((sourceFile) => !managedDirectories.some((directory) => isInside(sourceFile.fileName, directory)))
     .forEach(visitNode)
 
+  const htmlReferences = collectHtmlI18nReferences({
+    directory: projectDirectory,
+    ignoredDirectories: managedDirectories,
+  })
+  htmlReferences.forEach((reference) => {
+    if (!leafKeySet.has(reference.key)) return
+    addReferenceLocation(reference.key, reference)
+  })
+
   const entries = Object.fromEntries(leafKeys.map((key): [string, TranslationUsageEntry] => {
     const keyReferences = references.get(key) || []
     const keyUncertainReferences = uncertainReferences.get(key) || []
@@ -368,7 +387,7 @@ export function analyzeTranslationUsage({
     .filter((sourceFile) => !managedDirectories.some((directory) => isInside(sourceFile.fileName, directory)))
   return {
     analyzedAt: Date.now(),
-    sourceFileCount: analyzedSourceFiles.length,
+    sourceFileCount: analyzedSourceFiles.length + new Set(htmlReferences.map((reference) => reference.file)).size,
     entries,
   }
 }

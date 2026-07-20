@@ -8,6 +8,10 @@ const CURRENT_BUNDLE_KEY = 'current'
 const PROJECT_CONFIG_KEY = 'project-config'
 const LEGACY_VISUALIZATION_CONFIG_KEY = 'visualization-config'
 
+function projectKey(projectDirectory: string, key: string): string {
+  return `${key}:${projectDirectory}`
+}
+
 type StoredBundleRecord = { id: string; bundle: I18nBundle }
 type StoredConfigRecord = { id: string; config: EditorProjectConfig }
 
@@ -39,12 +43,12 @@ function openDatabase(): Promise<IDBDatabase> {
   })
 }
 
-export async function loadStoredBundle(): Promise<I18nBundle | null> {
+export async function loadStoredBundle(projectDirectory: string): Promise<I18nBundle | null> {
   const database = await openDatabase()
   try {
     const transaction = database.transaction(STORE_NAME, 'readonly')
     const record = await requestResult<StoredBundleRecord | undefined>(
-      transaction.objectStore(STORE_NAME).get(CURRENT_BUNDLE_KEY),
+      transaction.objectStore(STORE_NAME).get(projectKey(projectDirectory, CURRENT_BUNDLE_KEY)),
     )
     await transactionComplete(transaction)
     return record ? assertBundle(record.bundle) : null
@@ -53,26 +57,26 @@ export async function loadStoredBundle(): Promise<I18nBundle | null> {
   }
 }
 
-export async function saveStoredBundle(bundle: I18nBundle): Promise<void> {
+export async function saveStoredBundle(projectDirectory: string, bundle: I18nBundle): Promise<void> {
   const database = await openDatabase()
   try {
     const transaction = database.transaction(STORE_NAME, 'readwrite')
-    await requestResult(transaction.objectStore(STORE_NAME).put({ id: CURRENT_BUNDLE_KEY, bundle }))
+    await requestResult(transaction.objectStore(STORE_NAME).put({ id: projectKey(projectDirectory, CURRENT_BUNDLE_KEY), bundle }))
     await transactionComplete(transaction)
   } finally {
     database.close()
   }
 }
 
-export async function loadStoredProjectConfig(): Promise<EditorProjectConfig | null> {
+export async function loadStoredProjectConfig(projectDirectory: string): Promise<EditorProjectConfig | null> {
   const database = await openDatabase()
   try {
     const transaction = database.transaction(STORE_NAME, 'readonly')
     const store = transaction.objectStore(STORE_NAME)
-    const record = await requestResult<StoredConfigRecord | undefined>(store.get(PROJECT_CONFIG_KEY))
+    const record = await requestResult<StoredConfigRecord | undefined>(store.get(projectKey(projectDirectory, PROJECT_CONFIG_KEY)))
     const legacyRecord = record
       ? undefined
-      : await requestResult<StoredConfigRecord | undefined>(store.get(LEGACY_VISUALIZATION_CONFIG_KEY))
+      : await requestResult<StoredConfigRecord | undefined>(store.get(projectKey(projectDirectory, LEGACY_VISUALIZATION_CONFIG_KEY)))
     await transactionComplete(transaction)
     return record?.config ?? legacyRecord?.config ?? null
   } finally {
@@ -80,11 +84,11 @@ export async function loadStoredProjectConfig(): Promise<EditorProjectConfig | n
   }
 }
 
-export async function saveStoredProjectConfig(config: EditorProjectConfig): Promise<void> {
+export async function saveStoredProjectConfig(projectDirectory: string, config: EditorProjectConfig): Promise<void> {
   const database = await openDatabase()
   try {
     const transaction = database.transaction(STORE_NAME, 'readwrite')
-    await requestResult(transaction.objectStore(STORE_NAME).put({ id: PROJECT_CONFIG_KEY, config }))
+    await requestResult(transaction.objectStore(STORE_NAME).put({ id: projectKey(projectDirectory, PROJECT_CONFIG_KEY), config }))
     await transactionComplete(transaction)
   } finally {
     database.close()

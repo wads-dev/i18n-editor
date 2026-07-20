@@ -12,11 +12,12 @@ The package compiles the browser editor and its reusable operations from TypeScr
 | --- | --- |
 | [`@wads.dev/i18n-ts`](https://github.com/wads-dev/i18n-ts) | Framework-independent contracts, language loading, project configuration and portable bundles. |
 | [`@wads.dev/i18n-react`](https://github.com/wads-dev/i18n-react) | Optional React Provider, hooks and rich translation rendering. |
+| [`@wads.dev/i18n-html`](https://github.com/wads-dev/i18n-html) | Optional DOM bindings and static HTML translation-reference discovery. |
 | [`@wads.dev/i18n-editor`](https://github.com/wads-dev/i18n-editor) | Local bundle and project editor. This repository. |
 
 The Editor consumes the bundle and `i18n.config.json` formats defined by `i18n-ts`. It is framework-independent: React projects may use `i18n-react`, but the Editor does not require it.
 
-The interface itself uses the `i18n-ts` runtime with a zero-level English and Portuguese catalog. The browser locale selects the initial language, and the explicit choice is persisted locally for future sessions. The runtime bootstrap exposes the selected, deeply frozen tree as the typed global `Lang`, so editor modules access translations without importing the catalog.
+The interface itself uses the `i18n-ts` runtime with a zero-level English and Portuguese catalog. The browser locale selects the initial language, and the explicit choice is persisted locally for future sessions. The runtime bootstrap exposes the selected, deeply frozen tree as the typed global `Lang`, so editor modules access translations without importing the catalog. Static DOM bindings use `@wads.dev/i18n-html`.
 
 ## Development
 
@@ -25,6 +26,15 @@ npm install
 npm run check
 npm run build
 ```
+
+Run the editor itself in development mode:
+
+```sh
+npm start
+npm start -- --port 4300
+```
+
+The server runs directly from TypeScript with `nodemon` and `tsx`, while a second `nodemon` process runs `build:web` whenever the HTML, CSS or browser TypeScript files change.
 
 Run the generated executable from this repository:
 

@@ -15,24 +15,12 @@ import { createEditorState } from './state.js'
 import { createEditorView } from './view.js'
 import type { ProjectExportPreviewChange, TranslationUsageReport } from '../core/projectApi.js'
 import { initializeLanguage, setLanguage, type EditorLanguage } from './language.js'
+import { translateHtml } from '@wads.dev/i18n-html'
 
 await initializeLanguage()
 
-function readTranslation(path: string): string {
-  const value = path.split('.').reduce<unknown>((current, segment) => {
-    return current && typeof current === 'object' ? current[segment] : undefined
-  }, Lang)
-  if (typeof value !== 'string') throw new Error(`Static translation not found: ${path}`)
-  return value
-}
-
 function translateStaticDocument(): void {
-  document.querySelectorAll<HTMLElement>('[data-i18n]').forEach((element) => {
-    element.textContent = readTranslation(element.dataset.i18n || '')
-  })
-  document.querySelectorAll<HTMLInputElement>('[data-i18n-placeholder]').forEach((element) => {
-    element.placeholder = readTranslation(element.dataset.i18nPlaceholder || '')
-  })
+  translateHtml(document, Lang)
   document.title = `${Lang.page.title} · i18n`
 }
 
@@ -91,6 +79,7 @@ const elements = {
 
 let settingsPanelVisible = false
 let projectConfig = createDefaultEditorProjectConfig()
+let currentProjectDirectory = ''
 let checkedExportChanges: ProjectExportPreviewChange[] | null = null
 let exportPreviewRequestVersion = 0
 let visualLevelCountOverride: number | null = null
@@ -275,7 +264,7 @@ function applyProjectConfig(nextConfig, persist = true, renderLevelImports = tru
   if (!persist) return
   projectConfigQueue = projectConfigQueue
     .catch(() => undefined)
-    .then(() => saveStoredProjectConfig(projectConfig))
+    .then(() => saveStoredProjectConfig(currentProjectDirectory, projectConfig))
     .catch((error) => {
       setFeedback(Lang.messages.couldNotSaveSettings(error instanceof Error ? error.message : String(error)), true)
     })
@@ -286,7 +275,7 @@ let persistenceQueue = Promise.resolve()
 function persistBundle(bundle) {
   persistenceQueue = persistenceQueue
     .catch(() => undefined)
-    .then(() => saveStoredBundle(bundle))
+    .then(() => saveStoredBundle(currentProjectDirectory, bundle))
     .catch((error) => {
       setFeedback(Lang.messages.couldNotSaveLocalCopy(error instanceof Error ? error.message : String(error)), true)
     })
@@ -682,10 +671,11 @@ async function loadProject() {
   setProjectStatus(Lang.messages.connecting)
 
   try {
-    const [info, storedBundle, storedConfig] = await Promise.all([
-      getProjectInfo(),
-      loadStoredBundle(),
-      loadStoredProjectConfig(),
+    const info = await getProjectInfo()
+    currentProjectDirectory = info.projectDirectory
+    const [storedBundle, storedConfig] = await Promise.all([
+      loadStoredBundle(currentProjectDirectory),
+      loadStoredProjectConfig(currentProjectDirectory),
     ])
 
     if (info.config) {

@@ -5,11 +5,12 @@ The Editor is a local Node.js application with a browser interface. The publishe
 ## Source boundaries
 
 - `src/core/` contains environment-neutral editing and export-plan operations. It is strict TypeScript and may be consumed by the browser or future server routes.
-- `src/web/` contains the browser interface. It is bundled into `dist/public/editor.js`.
+- `src/web/` contains the browser interface. It is bundled into `dist/public/editor.js`. Declarative DOM translation comes from `@wads.dev/i18n-html`, not from editor-owned runtime code.
 - `src/web/i18n/` is the Editor's own zero-level English and Portuguese catalog. `src/web/language.ts` is the only module that imports the runtime language loader. It publishes the deeply frozen, typed translation tree as `globalThis.Lang`; browser modules consume the declared global directly instead of importing the catalog.
 - `src/server/` owns the local Fastify server. It must bind to loopback by default.
 - `src/cli/` owns process lifecycle and declares commands and options through Commander. Commander owns parsing, validation and generated help. The emitted entry point is the package executable.
 - `scripts/` contains deterministic build support only.
+- Development mode uses `concurrently` to run a `nodemon`/`tsx` TypeScript server and a second `nodemon` process for `build:web`. The server runs directly from TypeScript, while the web watcher keeps `dist/public` synchronized with browser source changes.
 
 ## Build output
 
@@ -31,9 +32,11 @@ The Editor is a local Node.js application with a browser interface. The publishe
 
 The default project is the process working directory. CLI arguments override discovery, followed by `catalogFile` from `i18n.config.json`, then conventional catalog paths.
 
+Browser-persisted bundles and project configuration are keyed by the `projectDirectory` returned by `GET /api/project`. They must never cross project boundaries, even when two editor instances share the same browser origin. The editor interface language is intentionally global to the browser and is not project-scoped.
+
 `i18n-edit preview` is the read-only CLI representation of the Web Editor export preview. Both originate from the same environment-neutral `buildExportPlan` operation; the server enriches that plan with filesystem states, obsolete files and unified diffs. The CLI displays diffs by default and accepts `--no-diff`; the browser requests them only through its explicit verification action.
 
-`i18n-edit usage` and the Web Editor usage action share the Compiler API analyzer. Generated translation directories are excluded from reference counting. Exact symbol references are `used`, dynamic access to a known translation collection is `uncertain`, and a leaf with neither is `unreferenced`. A usage report belongs to the current source tree and remains outside bundles and project configuration.
+`i18n-edit usage` and the Web Editor usage action share the Compiler API analyzer. Generated translation directories are excluded from reference counting. Exact TypeScript symbol references and declarative HTML bindings discovered by `@wads.dev/i18n-html/usage` are `used`; dynamic access to a known translation collection is `uncertain`, and a leaf with neither is `unreferenced`. A usage report belongs to the current source tree and remains outside bundles and project configuration.
 
 Usage reports are stored at `node_modules/.cache/@wads.dev/i18n-editor/usage.json`. The cache fingerprint covers the translation key structure and the configuration fields that affect ownership and resolution. It deliberately does not fingerprint every source file: opening the editor stays fast, and the explicit **Update usages** action is responsible for incorporating source-only changes. On page load, the browser first requests the latest cache without waiting. It renders an unverified report when available, then explicitly requests a fresh report with `wait: true`; a missing cache follows the same second-request path. A verified cache is rendered without automatic regeneration.
 

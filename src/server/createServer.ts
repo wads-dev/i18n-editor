@@ -1,6 +1,8 @@
 import fastifyStatic from '@fastify/static'
 import { assertBundle } from '@wads.dev/i18n-ts/bundle'
 import Fastify, { type FastifyInstance } from 'fastify'
+import fs from 'node:fs'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import type {
@@ -21,7 +23,10 @@ import { inspectTranslationUsageCache, refreshTranslationUsageCache } from './us
 
 export async function createServer(options: ProjectContextOptions = {}): Promise<FastifyInstance> {
   const server = Fastify({ logger: false })
-  const publicDirectory = fileURLToPath(new URL('../public/', import.meta.url))
+  const compiledPublicDirectory = fileURLToPath(new URL('../public/', import.meta.url))
+  const publicDirectory = fs.existsSync(compiledPublicDirectory)
+    ? compiledPublicDirectory
+    : path.resolve(fileURLToPath(new URL('../../dist/public/', import.meta.url)))
   const project = createProjectContext(options)
   let exportQueue: Promise<unknown> = Promise.resolve()
 
