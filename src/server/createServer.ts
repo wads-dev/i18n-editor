@@ -11,10 +11,13 @@ import type {
   ProjectExportPreviewRequest,
   ProjectExportPreviewResult,
   ProjectInfo,
+  TranslationUsageReport,
+  TranslationUsageRequest,
 } from '../core/projectApi.js'
 import { normalizeEditorProjectConfig } from '../core/projectConfig.js'
 import { applyProjectExport, planProjectExport } from './exportProject.js'
 import { createProjectContext, type ProjectContextOptions } from './projectContext.js'
+import { analyzeTranslationUsage } from './usageAnalysis.js'
 
 export async function createServer(options: ProjectContextOptions = {}): Promise<FastifyInstance> {
   const server = Fastify({ logger: false })
@@ -50,6 +53,21 @@ export async function createServer(options: ProjectContextOptions = {}): Promise
       return {
         changes: plan.changes.map(({ kind, path, status, diff }) => ({ kind, path, status, diff })),
       }
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) })
+    }
+  })
+
+  server.post<{
+    Body: TranslationUsageRequest
+    Reply: TranslationUsageReport | ApiError
+  }>('/api/usage-analysis', { bodyLimit: 20 * 1024 * 1024 }, async (request, reply) => {
+    try {
+      return analyzeTranslationUsage({
+        projectDirectory: project.projectDirectory,
+        bundle: assertBundle(request.body?.bundle),
+        config: normalizeEditorProjectConfig(request.body?.config),
+      })
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) })
     }

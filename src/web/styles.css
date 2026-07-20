@@ -61,6 +61,16 @@ h2 { margin-bottom: 4px; font-size: 18px; }
 .export-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .export-delete-option { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .export-delete-option input { width: 15px; height: 15px; margin: 0; accent-color: var(--danger); }
+.translation-actions { display: flex; align-items: flex-end; gap: 10px; }
+.usage-cell { min-width: 112px; font-size: 12px; }
+.usage-details > summary { cursor: pointer; list-style: none; font-weight: 800; }
+.usage-details > summary::-webkit-details-marker { display: none; }
+.usage-used > summary { color: #15803d; }
+.usage-unreferenced > summary { color: var(--danger); }
+.usage-uncertain > summary { color: #b45309; }
+.usage-references { display: grid; gap: 5px; min-width: 340px; margin: 8px 0 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.usage-references code { white-space: nowrap; }
+.usage-empty { color: var(--muted); }
 .export-preview-feedback { min-height: 21px; margin-top: 5px; font-size: 13px; }
 .export-preview-feedback.error { color: var(--danger); }
 .export-preview-feedback.warning { color: #b45309; font-weight: 700; }
@@ -136,6 +146,7 @@ tr[hidden] { display: none; }
 @media (max-width: 720px) {
   .page { width: min(100% - 24px, 1500px); margin: 24px auto; }
   .report-header { align-items: flex-start; flex-direction: column; }
+  .translation-actions { width: 100%; align-items: stretch; flex-direction: column; }
   .export-preview-header { flex-direction: column; }
   .export-diff-details { margin-left: 0; }
   .settings-fields, .level-replacers { grid-template-columns: 1fr; }

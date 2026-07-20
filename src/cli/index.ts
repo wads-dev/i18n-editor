@@ -8,6 +8,8 @@ import { Command, InvalidArgumentError } from 'commander'
 import { createServer } from '../server/createServer.js'
 import { applyProjectExport, planProjectExport, type ProjectExportPlan } from '../server/exportProject.js'
 import { createProjectContext } from '../server/projectContext.js'
+import { analyzeTranslationUsage } from '../server/usageAnalysis.js'
+import type { TranslationUsageReport } from '../core/projectApi.js'
 
 type CommonOptions = {
   project: string
@@ -30,6 +32,12 @@ type ExportOptions = {
   yes?: boolean
   delete?: boolean
   diff: boolean
+}
+
+type UsageOptions = {
+  file: string
+  json?: boolean
+  failOnUnreferenced?: boolean
 }
 
 function parsePort(value: string): number {
@@ -148,6 +156,47 @@ async function exportBundle(command: Command, options: ExportOptions): Promise<v
   console.log(`${writeCount} files written, ${appliedDeletionCount} deleted.`)
 }
 
+function printUsageReport(report: TranslationUsageReport): void {
+  Object.entries(report.entries).forEach(([key, usage]) => {
+    const status = usage.status === 'used'
+      ? colorize('used        ', 'green')
+      : usage.status === 'uncertain'
+        ? colorize('uncertain   ', 'yellow')
+        : colorize('unreferenced', 'red')
+    console.log(`${status}  ${String(usage.referenceCount).padStart(3)} refs  ${String(usage.fileCount).padStart(3)} files  ${key}`)
+    usage.references.forEach((reference) => {
+      console.log(`                ${reference.file}:${reference.line}:${reference.column}`)
+    })
+    if (usage.status === 'uncertain') usage.uncertainReferences.forEach((reference) => {
+      console.log(`                ? ${reference.file}:${reference.line}:${reference.column}`)
+    })
+  })
+  const values = Object.values(report.entries)
+  const used = values.filter(({ status }) => status === 'used').length
+  const uncertain = values.filter(({ status }) => status === 'uncertain').length
+  const unreferenced = values.filter(({ status }) => status === 'unreferenced').length
+  console.log(`\n${values.length} keys analyzed across ${report.sourceFileCount} source files: ${used} used, ${uncertain} uncertain, ${unreferenced} unreferenced.`)
+}
+
+async function analyzeUsage(command: Command, options: UsageOptions): Promise<void> {
+  const projectOptions = getProjectOptions(command, options.file)
+  const project = createProjectContext(projectOptions)
+  const info = await project.getInfo()
+  if (!info.config) throw new Error('Could not find i18n.config.json. Pass --config with the project configuration path.')
+  if (!info.bundle) throw new Error(`Could not find the bundle at ${info.bundlePath}. Run the bundle command first or pass --file.`)
+  const report = analyzeTranslationUsage({
+    projectDirectory: project.projectDirectory,
+    bundle: info.bundle,
+    config: info.config,
+  })
+  if (options.json) console.log(JSON.stringify(report, null, 2))
+  else printUsageReport(report)
+  if (options.failOnUnreferenced
+    && Object.values(report.entries).some(({ status }) => status === 'unreferenced')) {
+    process.exitCode = 1
+  }
+}
+
 function createProgram(): Command {
   const packageJson = createRequire(import.meta.url)('../../package.json') as { version: string }
   const program = new Command()
@@ -213,6 +262,16 @@ function createProgram(): Command {
     .action(async (options: BundleOptions & Omit<ExportOptions, 'file'>, command: Command) => {
       await generateBundle(command, options.output)
       await exportBundle(command, { ...options, file: options.output })
+    })
+
+  program
+    .command('usage')
+    .description('analyze static references to every translation key')
+    .option('-f, --file <path>', 'input bundle path', 'i18n.bundle.json')
+    .option('--json', 'print the usage report as JSON')
+    .option('--fail-on-unreferenced', 'exit with code 1 when a key has no static references')
+    .action(async (options: UsageOptions, command: Command) => {
+      await analyzeUsage(command, options)
     })
 
   return program

@@ -9,7 +9,7 @@ import { createDefaultEditorProjectConfig, normalizeEditorProjectConfig } from '
 import { setStringValue } from '../core/setStringValue.js'
 import { renderExportPreview } from './export-preview.js'
 import { renderLevelImportFields } from './project-settings.js'
-import { checkProjectExport, exportProject, generateProjectBundle, getProjectInfo } from './project-api.js'
+import { analyzeProjectUsage, checkProjectExport, exportProject, generateProjectBundle, getProjectInfo } from './project-api.js'
 import { createEditorState } from './state.js'
 import { createEditorView } from './view.js'
 import type { ProjectExportPreviewChange } from '../core/projectApi.js'
@@ -59,6 +59,7 @@ const elements = {
   projectStatus: getElement<HTMLElement>('#project-status'),
   projectStatusText: getElement<HTMLElement>('#project-status-text'),
   retryProjectLoad: getElement<HTMLButtonElement>('#retry-project-load'),
+  analyzeUsage: getElement<HTMLButtonElement>('#analyze-usage'),
 }
 
 let settingsPanelVisible = false
@@ -79,6 +80,13 @@ function invalidateExportPreview() {
   elements.exportProject.disabled = !state.getBundle()
   elements.checkExportDiffs.textContent = 'Verificar diffs'
   renderCurrentExportPreview()
+}
+
+function invalidateUsageAnalysis(message = ''): void {
+  view.setUsageReport(null)
+  elements.analyzeUsage.disabled = !state.getBundle()
+  elements.analyzeUsage.textContent = 'Analisar usos'
+  if (message) setFeedback(message)
 }
 
 const view = createEditorView({
@@ -185,6 +193,7 @@ function applyProjectConfig(nextConfig, persist = true, renderLevelImports = tru
     })
   }
   view.setProjectConfig(projectConfig)
+  invalidateUsageAnalysis()
   invalidateExportPreview()
 
   if (!persist) return
@@ -210,12 +219,35 @@ function persistBundle(bundle) {
 state.subscribe((bundle) => {
   view.render(bundle)
   invalidateExportPreview()
+  invalidateUsageAnalysis()
   if (bundle) persistBundle(bundle)
 })
 view.render(state.getBundle())
 
 elements.toggleSettingsPanel.addEventListener('click', () => {
   setSettingsPanelVisibility(!settingsPanelVisible)
+})
+
+elements.analyzeUsage.addEventListener('click', async () => {
+  const bundle = state.getBundle()
+  if (!bundle) return
+  elements.analyzeUsage.disabled = true
+  elements.analyzeUsage.textContent = 'Analisando…'
+  setFeedback('Analisando referências tipadas no projeto…')
+  try {
+    const report = await analyzeProjectUsage(bundle, projectConfig)
+    view.setUsageReport(report)
+    const usages = Object.values(report.entries)
+    const used = usages.filter(({ status }) => status === 'used').length
+    const uncertain = usages.filter(({ status }) => status === 'uncertain').length
+    const unreferenced = usages.filter(({ status }) => status === 'unreferenced').length
+    setFeedback(`${used} chaves usadas, ${uncertain} incertas e ${unreferenced} sem referências estáticas em ${report.sourceFileCount} arquivos.`)
+  } catch (error) {
+    setFeedback(`Não foi possível analisar os usos: ${error instanceof Error ? error.message : String(error)}`, true)
+  } finally {
+    elements.analyzeUsage.disabled = !state.getBundle()
+    elements.analyzeUsage.textContent = 'Analisar novamente'
+  }
 })
 
 elements.checkExportDiffs.addEventListener('click', async () => {

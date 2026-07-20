@@ -24,12 +24,15 @@ The Editor is a local Node.js application with a browser interface. The publishe
 - `POST /api/bundle` runs the `@wads.dev/i18n-ts` bundler for the fixed catalog and writes only the configured bundle file.
 - `POST /api/export-preview` compares the browser's in-memory bundle and configuration with the fixed project filesystem. It is read-only and returns relative paths, statuses and unified diffs, never generated contents or absolute paths.
 - `POST /api/export` recalculates that plan from the browser's in-memory bundle and configuration, then writes generated sources through the same atomic export operation used by the CLI. Obsolete files require either project `autoDelete` or explicit confirmation from the editor request.
+- `POST /api/usage-analysis` builds a TypeScript Program from the fixed project's `tsconfig.json`, maps root translation leaf symbols and returns exact and uncertain source references. Analysis is read-only, on demand and never stored in the portable bundle.
 - Concurrent generation requests share one in-flight operation.
 - The browser can regenerate translation sources only through an explicit export action and confirmation. It cannot choose the project directory or arbitrary output paths.
 
 The default project is the process working directory. CLI arguments override discovery, followed by `catalogFile` from `i18n.config.json`, then conventional catalog paths.
 
 `i18n-edit preview` is the read-only CLI representation of the Web Editor export preview. Both originate from the same environment-neutral `buildExportPlan` operation; the server enriches that plan with filesystem states, obsolete files and unified diffs. The CLI displays diffs by default and accepts `--no-diff`; the browser requests them only through its explicit verification action.
+
+`i18n-edit usage` and the Web Editor usage action share the Compiler API analyzer. Generated translation directories are excluded from reference counting. Exact symbol references are `used`, dynamic access to a known translation collection is `uncertain`, and a leaf with neither is `unreferenced`. A usage report belongs to the current source tree and remains outside bundles and project configuration. The first version intentionally has no persistent cache.
 
 ## Source export safety
 

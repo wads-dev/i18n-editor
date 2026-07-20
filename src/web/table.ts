@@ -1,4 +1,5 @@
 import type { I18nBundle } from '@wads.dev/i18n-ts/bundle'
+import type { TranslationUsageEntry, TranslationUsageReport } from '../core/projectApi.js'
 import { getEditorLevelName, type EditorProjectConfig } from '../core/projectConfig.js'
 
 function isFunctionDescriptor(value) {
@@ -52,6 +53,40 @@ function createCell(document, value, className) {
   const cell = document.createElement('td')
   if (className) cell.className = className
   cell.textContent = value
+  return cell
+}
+
+function createUsageCell(document: Document, usage: TranslationUsageEntry | undefined): HTMLTableCellElement {
+  const cell = document.createElement('td')
+  cell.className = 'usage-cell'
+  if (!usage) {
+    cell.classList.add('usage-empty')
+    cell.textContent = 'Não analisado'
+    return cell
+  }
+  const details = document.createElement('details')
+  details.className = `usage-details usage-${usage.status}`
+  const summary = document.createElement('summary')
+  summary.textContent = usage.status === 'uncertain'
+    ? `${usage.uncertainReferenceCount} incerto${usage.uncertainReferenceCount === 1 ? '' : 's'} · ${usage.fileCount} arq.`
+    : `${usage.referenceCount} ref${usage.referenceCount === 1 ? '' : 's'} · ${usage.fileCount} arq.`
+  details.append(summary)
+  const references = document.createElement('div')
+  references.className = 'usage-references'
+  const displayedReferences = usage.status === 'uncertain' ? usage.uncertainReferences : usage.references
+  if (displayedReferences.length === 0) {
+    references.textContent = usage.status === 'uncertain'
+      ? 'Um acesso dinâmico pode alcançar esta chave.'
+      : 'Nenhuma referência estática encontrada.'
+  } else {
+    displayedReferences.forEach((reference) => {
+      const location = document.createElement('code')
+      location.textContent = `${reference.file}:${reference.line}:${reference.column}`
+      references.append(location)
+    })
+  }
+  details.append(references)
+  cell.append(details)
   return cell
 }
 
@@ -139,12 +174,16 @@ function getRelativeKey(fullKey, depth) {
   return fullKey.split('.').slice(depth).join('.')
 }
 
-function createTranslationTable(document, languages, rows, depth, { onMoveKey, onEditValue }) {
+function createTranslationTable(document, languages, rows, depth, { onMoveKey, onEditValue, usageReport }) {
   const table = document.createElement('table')
   const header = table.createTHead().insertRow()
   const keyHeader = document.createElement('th')
   keyHeader.textContent = 'Chave'
   header.append(keyHeader)
+
+  const usageHeader = document.createElement('th')
+  usageHeader.textContent = 'Usos'
+  header.append(usageHeader)
 
   languages.forEach(([key, language]) => {
     const cell = document.createElement('th')
@@ -172,6 +211,7 @@ function createTranslationTable(document, languages, rows, depth, { onMoveKey, o
       keyCell.addEventListener('dblclick', () => onMoveKey(fullKey))
     }
     row.append(keyCell)
+    row.append(createUsageCell(document, usageReport?.entries[fullKey]))
 
     languages.forEach(([languageKey], index) => {
       const entry = languageEntries[index]
@@ -248,6 +288,7 @@ function appendTableGroup(document, container, node, languages, callbacks, isRoo
 
 type RenderTranslationOptions = {
   projectConfig: EditorProjectConfig
+  usageReport?: TranslationUsageReport | null
   onMoveKey?: (sourceKey: string) => void
   onEditValue?: (change: { languageKey: string; key: string; value: string }) => boolean
 }
@@ -255,7 +296,7 @@ type RenderTranslationOptions = {
 export function renderTranslationTables(
   container: HTMLElement,
   bundle: I18nBundle,
-  { projectConfig, onMoveKey, onEditValue }: RenderTranslationOptions,
+  { projectConfig, usageReport, onMoveKey, onEditValue }: RenderTranslationOptions,
 ) {
   const document = container.ownerDocument
   const { languages, rows } = createRows(bundle)
@@ -263,7 +304,7 @@ export function renderTranslationTables(
   const tree = createGroupTree(rows, normalizedLevelCount)
   const fragment = document.createDocumentFragment()
 
-  appendTableGroup(document, fragment, tree, languages, { projectConfig, onMoveKey, onEditValue }, true)
+  appendTableGroup(document, fragment, tree, languages, { projectConfig, usageReport, onMoveKey, onEditValue }, true)
   container.replaceChildren(fragment)
   return rows.length
 }

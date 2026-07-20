@@ -154,10 +154,13 @@
             <p id="bundle-summary">Carregue um bundle para visualizar as traduções.</p>
             <p id="editor-feedback" class="feedback" role="status" aria-live="polite"></p>
           </div>
-          <label class="search-field" for="translation-search">
-            <span>Buscar</span>
-            <input id="translation-search" type="search" placeholder="Chave ou tradução">
-          </label>
+          <div class="translation-actions">
+            <button id="analyze-usage" class="secondary-button" type="button" disabled>Analisar usos</button>
+            <label class="search-field" for="translation-search">
+              <span>Buscar</span>
+              <input id="translation-search" type="search" placeholder="Chave ou tradução">
+            </label>
+          </div>
         </div>
         <div id="empty-state" class="empty-state">Nenhum bundle carregado.</div>
         <div id="table-wrap" class="table-wrap" hidden></div>

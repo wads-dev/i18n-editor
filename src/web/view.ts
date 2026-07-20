@@ -5,6 +5,7 @@ export function createEditorView({ emptyState, tableWrap, tableContainer, summar
   let currentRows = []
   let currentBundle = null
   let projectConfig = createDefaultEditorProjectConfig()
+  let usageReport = null
 
   search.addEventListener('input', () => {
     const query = search.value.trim().toLocaleLowerCase()
@@ -27,6 +28,7 @@ export function createEditorView({ emptyState, tableWrap, tableContainer, summar
 
       const keyCount = renderTranslationTables(tableContainer, bundle, {
         projectConfig,
+        usageReport,
         onMoveKey,
         onEditValue,
       })
@@ -38,6 +40,10 @@ export function createEditorView({ emptyState, tableWrap, tableContainer, summar
     },
     setProjectConfig(nextProjectConfig) {
       projectConfig = nextProjectConfig
+      if (currentBundle) this.render(currentBundle)
+    },
+    setUsageReport(nextUsageReport) {
+      usageReport = nextUsageReport
       if (currentBundle) this.render(currentBundle)
     },
   }

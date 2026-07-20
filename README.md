@@ -93,6 +93,16 @@ i18n-edit sync --output review.bundle.json
 
 `sync` is equivalent to running `bundle` followed by `export` with the same bundle path. It preserves the export confirmation and accepts `--yes`, `--delete` and `--no-diff` when automation is intentional.
 
+Analyze typed static references to every translation leaf:
+
+```sh
+i18n-edit usage
+i18n-edit usage --json
+i18n-edit usage --fail-on-unreferenced
+```
+
+The report separates exact references from uncertain dynamic collection access. Exact entries include reference and file counts plus every source location. `unreferenced` means no static reference or known dynamic access was found; it is a diagnostic and never authorizes automatic deletion. Use `--fail-on-unreferenced` for an opt-in CI check.
+
 Each configured `i18n` directory is checked against the generated plan. Generated `base.ts`, language files and the configured root catalog are written; other files become deletion candidates unless their extensions are ignored by project configuration. Set `deletion` to `false` to disable this detection entirely. Files outside configured `i18n` directories are never candidates. Writes are restricted to the selected project directory and use a temporary file followed by an atomic rename.
 
 After the npm package is published, its binaries will be named `i18n-edit` and `i18n-editor`.
@@ -113,4 +123,4 @@ Because the npm package is scoped, `npx i18n-editor` would refer to a different,
 
 ## Current boundary
 
-The server reads project configuration and bundles through `GET /api/project`. It can generate a missing bundle through `POST /api/bundle`; this is currently its only project write. The Web Editor can explicitly request a read-only filesystem comparison through `POST /api/export-preview`. Source regeneration is available explicitly through the CLI `export` command and is not exposed as a browser route yet.
+The server reads project configuration and bundles through `GET /api/project` and can generate a missing bundle through `POST /api/bundle`. The Web Editor requests filesystem comparisons through `POST /api/export-preview`, performs confirmed source regeneration through `POST /api/export`, and runs typed usage analysis on demand through `POST /api/usage-analysis`. Project roots and arbitrary output paths cannot be selected by browser requests.

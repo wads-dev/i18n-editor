@@ -7,6 +7,7 @@ import type {
   ProjectExportPreviewResult,
   ProjectExportResult,
   ProjectInfo,
+  TranslationUsageReport,
 } from '../core/projectApi.js'
 
 async function readResponse<T>(response: Response): Promise<T> {
@@ -44,5 +45,13 @@ export async function exportProject(bundle, config, deleteObsolete = false): Pro
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ bundle, config, deleteObsolete }),
+  }))
+}
+
+export async function analyzeProjectUsage(bundle, config): Promise<TranslationUsageReport> {
+  return readResponse<TranslationUsageReport>(await fetch('/api/usage-analysis', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ bundle, config }),
   }))
 }

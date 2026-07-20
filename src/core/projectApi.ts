@@ -42,6 +42,29 @@ export type ProjectExportResult = ProjectExportPreviewResult & {
   preserved: number
 }
 
+export type TranslationUsageReference = {
+  file: string
+  line: number
+  column: number
+}
+
+export type TranslationUsageEntry = {
+  status: 'used' | 'unreferenced' | 'uncertain'
+  referenceCount: number
+  uncertainReferenceCount: number
+  fileCount: number
+  references: TranslationUsageReference[]
+  uncertainReferences: TranslationUsageReference[]
+}
+
+export type TranslationUsageReport = {
+  analyzedAt: number
+  sourceFileCount: number
+  entries: Record<string, TranslationUsageEntry>
+}
+
+export type TranslationUsageRequest = ProjectExportPreviewRequest
+
 export type ApiError = {
   error: string
 }

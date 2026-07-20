@@ -152,5 +152,5 @@ export function createProjectContext(options: ProjectContextOptions = {}) {
     return generation
   }
 
-  return { getInfo, generateBundle }
+  return { projectDirectory, getInfo, generateBundle }
 }
