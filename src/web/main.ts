@@ -115,14 +115,14 @@ function invalidateExportPreview() {
   elements.exportPreviewFeedback.classList.remove('error', 'warning')
   elements.checkExportDiffs.disabled = !state.getBundle()
   elements.exportProject.disabled = !state.getBundle()
-  elements.checkExportDiffs.textContent = 'Verificar diffs'
+  elements.checkExportDiffs.textContent = 'Check diffs'
   renderCurrentExportPreview()
 }
 
 function invalidateUsageAnalysis(message = ''): void {
   view.setUsageReport(currentUsageReport)
   elements.analyzeUsage.disabled = !state.getBundle()
-  elements.analyzeUsage.textContent = currentUsageReport ? 'Analisar novamente' : 'Analisar usos'
+  elements.analyzeUsage.textContent = currentUsageReport ? 'Update usages' : 'Analyze usages'
   if (message) setFeedback(message)
 }
 
@@ -133,23 +133,23 @@ const view = createEditorView({
   summary: elements.summary,
   search: elements.search,
   onMoveKey(sourceKey) {
-    const targetKey = window.prompt('Mover chave para:', sourceKey)
+    const targetKey = window.prompt('Move key to:', sourceKey)
     if (targetKey === null || targetKey.trim() === '' || targetKey === sourceKey) return
 
     try {
       state.update((bundle) => moveKey(bundle, { sourceKey, targetKey: targetKey.trim() }))
       remapUsageKey(sourceKey, targetKey.trim())
-      setFeedback(`Chave movida de ${sourceKey} para ${targetKey.trim()}.`)
+      setFeedback(`Key moved from ${sourceKey} to ${targetKey.trim()}.`)
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : String(error), true)
     }
   },
   onRemoveKey(key) {
-    if (!window.confirm(`Remover a chave "${key}" de todos os idiomas?\n\nA alteração ficará somente na bundle em memória até você exportar para o projeto.`)) return
+    if (!window.confirm(`Remove key "${key}" from every language?\n\nThe change will remain in the in-memory bundle until you export it to the project.`)) return
     try {
       state.update((bundle) => removeKey(bundle, { key }))
       removeUsageKey(key)
-      setFeedback(`Chave ${key} removida de todos os idiomas. Exporte para aplicar a alteração no projeto.`)
+      setFeedback(`Key ${key} removed from every language. Export to apply the change to the project.`)
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : String(error), true)
     }
@@ -157,7 +157,7 @@ const view = createEditorView({
   onEditValue({ languageKey, key, value }) {
     try {
       state.update((bundle) => setStringValue(bundle, { languageKey, key, value }))
-      setFeedback(`Tradução ${languageKey}.${key} atualizada.`)
+      setFeedback(`Translation ${languageKey}.${key} updated.`)
       return true
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : String(error), true)
@@ -177,7 +177,7 @@ function setSettingsPanelVisibility(visible) {
   elements.toggleSettingsPanel.setAttribute('aria-expanded', String(visible))
   elements.toggleSettingsPanel.setAttribute(
     'aria-label',
-    visible ? 'Ocultar configurações' : 'Mostrar configurações',
+    visible ? 'Hide settings' : 'Show settings',
   )
   elements.toggleSettingsPanel.title = elements.toggleSettingsPanel.getAttribute('aria-label')
 }
@@ -187,7 +187,7 @@ let projectConfigQueue = Promise.resolve()
 function parseJsonObject(value, fieldName) {
   const parsed = JSON.parse(value)
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`${fieldName} deve ser um objeto JSON.`)
+    throw new Error(`${fieldName} must be a JSON object.`)
   }
   return parsed
 }
@@ -234,7 +234,7 @@ function applyProjectConfig(nextConfig, persist = true, renderLevelImports = tru
           ? value
           : parseJsonObject(value, field === 'valueReplacer' ? 'Value replacer' : 'Full replacer')
         applyProjectConfig({ ...projectConfig, levelImports }, true, false)
-        setFeedback('Configuração atualizada.')
+        setFeedback('Configuration updated.')
       } catch (error) {
         setFeedback(error instanceof Error ? error.message : String(error), true)
       }
@@ -253,7 +253,7 @@ function applyProjectConfig(nextConfig, persist = true, renderLevelImports = tru
     .catch(() => undefined)
     .then(() => saveStoredProjectConfig(projectConfig))
     .catch((error) => {
-      setFeedback(`Não foi possível salvar as configurações: ${error instanceof Error ? error.message : String(error)}`, true)
+      setFeedback(`Could not save settings: ${error instanceof Error ? error.message : String(error)}`, true)
     })
 }
 
@@ -264,7 +264,7 @@ function persistBundle(bundle) {
     .catch(() => undefined)
     .then(() => saveStoredBundle(bundle))
     .catch((error) => {
-      setFeedback(`Não foi possível salvar a cópia local: ${error instanceof Error ? error.message : String(error)}`, true)
+      setFeedback(`Could not save the local copy: ${error instanceof Error ? error.message : String(error)}`, true)
     })
 }
 
@@ -280,26 +280,41 @@ elements.toggleSettingsPanel.addEventListener('click', () => {
   setSettingsPanelVisibility(!settingsPanelVisible)
 })
 
-elements.analyzeUsage.addEventListener('click', async () => {
+async function loadUsageAnalysis(wait: boolean): Promise<void> {
   const bundle = state.getBundle()
   if (!bundle) return
+  const config = projectConfig
   elements.analyzeUsage.disabled = true
-  elements.analyzeUsage.textContent = 'Analisando…'
-  setFeedback('Analisando referências tipadas no projeto…')
+  elements.analyzeUsage.textContent = wait ? 'Updating usages…' : 'Loading usages…'
   try {
-    const report = await analyzeProjectUsage(bundle, projectConfig)
-    replaceUsageReport(report)
+    const cached = await analyzeProjectUsage(bundle, config, wait)
+    if (state.getBundle() !== bundle || projectConfig !== config) return
+    if (cached.report) replaceUsageReport(cached.report)
+    if (!wait && cached.cacheStatus !== 'verified') {
+      setFeedback(cached.report
+        ? 'Showing an unverified cached usage report while a fresh analysis runs…'
+        : 'No usage cache was found. Analyzing typed references…')
+      const refreshed = await analyzeProjectUsage(bundle, config, true)
+      if (state.getBundle() !== bundle || projectConfig !== config) return
+      if (refreshed.report) replaceUsageReport(refreshed.report)
+    }
+    const report = currentUsageReport
+    if (!report) throw new Error('The usage analysis did not return a report.')
     const usages = Object.values(report.entries)
     const used = usages.filter(({ status }) => status === 'used').length
     const uncertain = usages.filter(({ status }) => status === 'uncertain').length
     const unreferenced = usages.filter(({ status }) => status === 'unreferenced').length
-    setFeedback(`${used} chaves usadas, ${uncertain} incertas e ${unreferenced} sem referências estáticas em ${report.sourceFileCount} arquivos.`)
+    setFeedback(`${used} used keys, ${uncertain} uncertain keys, and ${unreferenced} unreferenced keys across ${report.sourceFileCount} source files.`)
   } catch (error) {
-    setFeedback(`Não foi possível analisar os usos: ${error instanceof Error ? error.message : String(error)}`, true)
+    setFeedback(`Could not analyze usages: ${error instanceof Error ? error.message : String(error)}`, true)
   } finally {
     elements.analyzeUsage.disabled = !state.getBundle()
-    elements.analyzeUsage.textContent = 'Analisar novamente'
+    elements.analyzeUsage.textContent = currentUsageReport ? 'Update usages' : 'Analyze usages'
   }
+}
+
+elements.analyzeUsage.addEventListener('click', async () => {
+  await loadUsageAnalysis(true)
 })
 
 elements.showUnreferenced.addEventListener('change', () => {
@@ -319,8 +334,8 @@ elements.checkExportDiffs.addEventListener('click', async () => {
 
   const requestVersion = ++exportPreviewRequestVersion
   elements.checkExportDiffs.disabled = true
-  elements.checkExportDiffs.textContent = 'Verificando…'
-  elements.exportPreviewFeedback.textContent = 'Comparando com os arquivos atuais do projeto…'
+  elements.checkExportDiffs.textContent = 'Checking…'
+  elements.exportPreviewFeedback.textContent = 'Comparing with the current project files…'
   elements.exportPreviewFeedback.classList.remove('error', 'warning')
 
   try {
@@ -332,23 +347,23 @@ elements.checkExportDiffs.addEventListener('click', async () => {
     const deletionCount = result.changes.filter(({ status }) => status === 'delete').length
     if (deletionCount > 0) {
       const deletionMessage = projectConfig.deletion !== false && projectConfig.deletion.autoDelete
-        ? `${deletionCount} arquivo${deletionCount === 1 ? '' : 's'} divergente${deletionCount === 1 ? '' : 's'} ${deletionCount === 1 ? 'será excluído' : 'serão excluídos'} durante o export porque autoDelete está ativo.`
-        : `${deletionCount} candidato${deletionCount === 1 ? '' : 's'} à exclusão ${deletionCount === 1 ? 'será preservado' : 'serão preservados'} sem i18n-edit export --delete.`
-      elements.exportPreviewFeedback.textContent = `${changed} arquivo${changed === 1 ? '' : 's'} com alterações planejadas. Atenção: ${deletionMessage}`
+        ? `${deletionCount} divergent file${deletionCount === 1 ? '' : 's'} will be deleted because autoDelete is enabled.`
+        : `${deletionCount} deletion candidate${deletionCount === 1 ? '' : 's'} will be preserved without i18n-edit export --delete.`
+      elements.exportPreviewFeedback.textContent = `${changed} file${changed === 1 ? '' : 's'} with planned changes. Warning: ${deletionMessage}`
       elements.exportPreviewFeedback.classList.add('warning')
     } else {
       elements.exportPreviewFeedback.textContent = changed === 0
-        ? 'Os arquivos do projeto já correspondem à prévia.'
-        : `${changed} arquivo${changed === 1 ? '' : 's'} com alterações planejadas.`
+        ? 'The project files already match the preview.'
+        : `${changed} file${changed === 1 ? '' : 's'} with planned changes.`
     }
   } catch (error) {
     if (requestVersion !== exportPreviewRequestVersion) return
-    elements.exportPreviewFeedback.textContent = `Não foi possível verificar os diffs: ${error instanceof Error ? error.message : String(error)}`
+    elements.exportPreviewFeedback.textContent = `Could not check diffs: ${error instanceof Error ? error.message : String(error)}`
     elements.exportPreviewFeedback.classList.add('error')
   } finally {
     if (requestVersion === exportPreviewRequestVersion) {
       elements.checkExportDiffs.disabled = false
-      elements.checkExportDiffs.textContent = 'Verificar novamente'
+      elements.checkExportDiffs.textContent = 'Check again'
     }
   }
 })
@@ -359,8 +374,8 @@ elements.exportProject.addEventListener('click', async () => {
 
   elements.exportProject.disabled = true
   elements.checkExportDiffs.disabled = true
-  elements.exportProject.textContent = 'Preparando…'
-  elements.exportPreviewFeedback.textContent = 'Recalculando o plano antes da exportação…'
+  elements.exportProject.textContent = 'Preparing…'
+  elements.exportPreviewFeedback.textContent = 'Recalculating the plan before export…'
   elements.exportPreviewFeedback.classList.remove('error', 'warning')
 
   try {
@@ -372,43 +387,43 @@ elements.exportProject.addEventListener('click', async () => {
     const deleteObsolete = projectConfig.deletion !== false
       && (projectConfig.deletion.autoDelete || elements.exportDeleteObsolete.checked)
     const deletionText = deletionCandidates === 0
-      ? 'Nenhum arquivo será excluído.'
+      ? 'No files will be deleted.'
       : deleteObsolete
-        ? `${deletionCandidates} arquivo${deletionCandidates === 1 ? '' : 's'} divergente${deletionCandidates === 1 ? '' : 's'} ${deletionCandidates === 1 ? 'será excluído' : 'serão excluídos'}.`
-        : `${deletionCandidates} arquivo${deletionCandidates === 1 ? '' : 's'} divergente${deletionCandidates === 1 ? '' : 's'} ${deletionCandidates === 1 ? 'será preservado' : 'serão preservados'}.`
+        ? `${deletionCandidates} divergent file${deletionCandidates === 1 ? '' : 's'} will be deleted.`
+        : `${deletionCandidates} divergent file${deletionCandidates === 1 ? '' : 's'} will be preserved.`
 
     if (writable === 0 && (!deleteObsolete || deletionCandidates === 0)) {
-      elements.exportPreviewFeedback.textContent = 'Os arquivos do projeto já estão atualizados.'
+      elements.exportPreviewFeedback.textContent = 'The project files are already up to date.'
       return
     }
 
     const confirmed = window.confirm(
-      `Exportar as alterações para o projeto?\n\n${writable} arquivo${writable === 1 ? '' : 's'} ${writable === 1 ? 'será criado ou sobrescrito' : 'serão criados ou sobrescritos'}. ${deletionText}\n\nRevise os diffs exibidos antes de continuar.`,
+      `Export changes to the project?\n\n${writable} file${writable === 1 ? '' : 's'} will be created or overwritten. ${deletionText}\n\nReview the displayed diffs before continuing.`,
     )
     if (!confirmed) {
-      elements.exportPreviewFeedback.textContent = 'Exportação cancelada. Nenhum arquivo foi alterado.'
+      elements.exportPreviewFeedback.textContent = 'Export cancelled. No files were changed.'
       return
     }
 
-    elements.exportProject.textContent = 'Exportando…'
-    elements.exportPreviewFeedback.textContent = 'Escrevendo os arquivos no projeto…'
+    elements.exportProject.textContent = 'Exporting…'
+    elements.exportPreviewFeedback.textContent = 'Writing files to the project…'
     const result = await exportProject(bundle, projectConfig, deleteObsolete)
     const currentPreview = await checkProjectExport(bundle, projectConfig)
     checkedExportChanges = currentPreview.changes
     renderCurrentExportPreview()
     elements.exportPreviewFeedback.textContent = [
-      `${result.written} arquivo${result.written === 1 ? '' : 's'} ${result.written === 1 ? 'escrito' : 'escritos'}.`,
-      result.deleted > 0 ? `${result.deleted} ${result.deleted === 1 ? 'excluído' : 'excluídos'}.` : '',
-      result.preserved > 0 ? `${result.preserved} divergente${result.preserved === 1 ? '' : 's'} ${result.preserved === 1 ? 'preservado' : 'preservados'}.` : '',
+      `${result.written} file${result.written === 1 ? '' : 's'} written.`,
+      result.deleted > 0 ? `${result.deleted} deleted.` : '',
+      result.preserved > 0 ? `${result.preserved} divergent file${result.preserved === 1 ? '' : 's'} preserved.` : '',
     ].filter(Boolean).join(' ')
-    setFeedback('Alterações exportadas para os arquivos do projeto.')
+    setFeedback('Changes exported to the project files.')
   } catch (error) {
-    elements.exportPreviewFeedback.textContent = `Não foi possível exportar: ${error instanceof Error ? error.message : String(error)}`
+    elements.exportPreviewFeedback.textContent = `Could not export: ${error instanceof Error ? error.message : String(error)}`
     elements.exportPreviewFeedback.classList.add('error')
   } finally {
     elements.exportProject.disabled = !state.getBundle()
     elements.checkExportDiffs.disabled = !state.getBundle()
-    elements.exportProject.textContent = 'Exportar para o projeto'
+    elements.exportProject.textContent = 'Export to project'
   }
 })
 
@@ -436,12 +451,12 @@ elements.languageFileTemplate.addEventListener('input', () => {
 
 elements.importAliases.addEventListener('input', () => {
   try {
-    const importAliases = parseJsonObject(elements.importAliases.value, 'Aliases de import')
+    const importAliases = parseJsonObject(elements.importAliases.value, 'Import aliases')
     applyProjectConfig({
       ...projectConfig,
       exportConfig: { ...projectConfig.exportConfig, importAliases },
     }, true, false, false)
-    setFeedback('Aliases atualizados.')
+    setFeedback('Import aliases updated.')
   } catch (error) {
     setFeedback(error instanceof Error ? error.message : String(error), true)
   }
@@ -459,8 +474,8 @@ elements.useDoubleQuotes.addEventListener('change', () => {
     },
   })
   setFeedback(elements.useDoubleQuotes.checked
-    ? 'A exportação usará aspas duplas.'
-    : 'A exportação usará aspas simples.')
+    ? 'Exports will use double quotes.'
+    : 'Exports will use single quotes.')
 })
 
 elements.useSemicolons.addEventListener('change', () => {
@@ -475,8 +490,8 @@ elements.useSemicolons.addEventListener('change', () => {
     },
   })
   setFeedback(elements.useSemicolons.checked
-    ? 'A exportação usará ponto e vírgula.'
-    : 'A exportação não usará ponto e vírgula.')
+    ? 'Exports will use semicolons.'
+    : 'Exports will not use semicolons.')
 })
 
 elements.useShorthandProperties.addEventListener('change', () => {
@@ -490,7 +505,7 @@ elements.useShorthandProperties.addEventListener('change', () => {
       },
     },
   })
-  setFeedback('Preferência de propriedades shorthand atualizada.')
+  setFeedback('Shorthand property preference updated.')
 })
 
 elements.useTrailingCommas.addEventListener('change', () => {
@@ -504,7 +519,7 @@ elements.useTrailingCommas.addEventListener('change', () => {
       },
     },
   })
-  setFeedback('Preferência de vírgula final atualizada.')
+  setFeedback('Trailing comma preference updated.')
 })
 
 function updateIndentation(): void {
@@ -521,7 +536,7 @@ function updateIndentation(): void {
       },
     },
   })
-  setFeedback('Indentação da exportação atualizada.')
+  setFeedback('Export indentation updated.')
 }
 
 elements.indentationCharacter.addEventListener('change', updateIndentation)
@@ -538,7 +553,7 @@ elements.printWidth.addEventListener('input', () => {
       },
     },
   })
-  setFeedback('Largura máxima da exportação atualizada.')
+  setFeedback('Maximum export line width updated.')
 })
 
 function updateInlineItemLimits(): void {
@@ -553,7 +568,7 @@ function updateInlineItemLimits(): void {
       },
     },
   })
-  setFeedback('Limites de coleções inline atualizados.')
+  setFeedback('Inline collection limits updated.')
 }
 
 elements.maxObjectInlineItems.addEventListener('input', updateInlineItemLimits)
@@ -571,7 +586,7 @@ function updateCollectionLayouts(): void {
       },
     },
   })
-  setFeedback('Layout de objetos e arrays atualizado.')
+  setFeedback('Object and array layouts updated.')
 }
 
 elements.objectLayout.addEventListener('change', updateCollectionLayouts)
@@ -579,9 +594,9 @@ elements.arrayLayout.addEventListener('change', updateCollectionLayouts)
 
 elements.languageReplacer.addEventListener('input', () => {
   try {
-    const languageReplacer = parseJsonObject(elements.languageReplacer.value, 'Replacer dos idiomas')
+    const languageReplacer = parseJsonObject(elements.languageReplacer.value, 'Language replacer')
     applyProjectConfig({ ...projectConfig, languageReplacer }, true, false, false)
-    setFeedback('Replacer dos idiomas atualizado.')
+    setFeedback('Language replacer updated.')
   } catch (error) {
     setFeedback(error instanceof Error ? error.message : String(error), true)
   }
@@ -595,8 +610,8 @@ elements.deletionEnabled.addEventListener('change', () => {
       : false,
   })
   setFeedback(elements.deletionEnabled.checked
-    ? 'Detecção de arquivos divergentes ativada.'
-    : 'Detecção e avisos de exclusão desativados.')
+    ? 'Divergent file detection enabled.'
+    : 'Deletion detection and warnings disabled.')
 })
 
 elements.ignoredDeletionExtensions.addEventListener('input', () => {
@@ -608,7 +623,7 @@ elements.ignoredDeletionExtensions.addEventListener('input', () => {
       ignoredExtensions: elements.ignoredDeletionExtensions.value.split(','),
     },
   })
-  setFeedback('Extensões ignoradas atualizadas.')
+  setFeedback('Ignored extensions updated.')
 })
 
 elements.autoDelete.addEventListener('change', () => {
@@ -618,8 +633,8 @@ elements.autoDelete.addEventListener('change', () => {
     deletion: { ...projectConfig.deletion, autoDelete: elements.autoDelete.checked },
   })
   setFeedback(elements.autoDelete.checked
-    ? 'Exclusão automática ativada para o projeto.'
-    : 'Exclusões voltarão a exigir a opção --delete.')
+    ? 'Automatic deletion enabled for this project.'
+    : 'Deletions will require the --delete option again.')
 })
 
 function setProjectStatus(message, isError = false) {
@@ -635,7 +650,7 @@ function hideProjectStatus() {
 }
 
 async function loadProject() {
-  setProjectStatus('Conectando ao projeto…')
+  setProjectStatus('Connecting to the project…')
 
   try {
     const [info, storedBundle, storedConfig] = await Promise.all([
@@ -654,9 +669,9 @@ async function loadProject() {
     let generated = false
     if (!projectBundle) {
       if (!info.canGenerateBundle) {
-        throw new Error('O projeto não possui uma bundle e o catálogo TypeScript não foi encontrado.')
+        throw new Error('The project has no bundle and its TypeScript catalog could not be found.')
       }
-      setProjectStatus('Gerando a bundle do projeto…')
+      setProjectStatus('Generating the project bundle…')
       projectBundle = (await generateProjectBundle()).bundle
       generated = true
     }
@@ -665,19 +680,20 @@ async function loadProject() {
     const selectedBundle = !storedBundle || projectIsNewer ? projectBundle : storedBundle
 
     if (projectIsNewer && !generated) {
-      window.alert('Existe uma bundle mais recente no projeto. Ela foi carregada e substituirá a cópia local do navegador.')
+      window.alert('A newer bundle exists in the project. It was loaded and will replace the browser copy.')
     }
 
     state.replaceBundle(selectedBundle)
     setFeedback(generated
-      ? 'Bundle gerada automaticamente a partir do catálogo do projeto.'
+      ? 'Bundle generated automatically from the project catalog.'
       : selectedBundle === storedBundle
-        ? 'Versão mais recente restaurada do navegador.'
-        : 'Bundle do projeto carregada automaticamente.')
+        ? 'The newest version was restored from the browser.'
+        : 'Project bundle loaded automatically.')
     hideProjectStatus()
+    void loadUsageAnalysis(false)
   } catch (error) {
     setProjectStatus(
-      `Não foi possível carregar o projeto: ${error instanceof Error ? error.message : String(error)}`,
+      `Could not load the project: ${error instanceof Error ? error.message : String(error)}`,
       true,
     )
   }

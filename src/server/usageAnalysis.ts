@@ -1,16 +1,28 @@
 import fs from 'node:fs'
+import fsPromises from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import ts from 'typescript'
 import type { I18nBundle } from '@wads.dev/i18n-ts/bundle'
 
 import { buildTranslationOwners } from '../core/exportPlan.js'
 import type { EditorProjectConfig } from '../core/projectConfig.js'
-import type { TranslationUsageEntry, TranslationUsageReport } from '../core/projectApi.js'
+import type { TranslationUsageEntry, TranslationUsageReport, TranslationUsageResponse } from '../core/projectApi.js'
 
 type UsageAnalysisOptions = {
   projectDirectory: string
   bundle: I18nBundle
   config: EditorProjectConfig
+}
+
+const USAGE_CACHE_FORMAT = 'wads-i18n-usage-cache'
+const USAGE_CACHE_VERSION = 1
+
+type UsageCache = {
+  format: typeof USAGE_CACHE_FORMAT
+  version: typeof USAGE_CACHE_VERSION
+  fingerprint: string
+  report: TranslationUsageReport
 }
 
 function collectLeafKeys(value: unknown, prefix = '', result: string[] = []): string[] {
@@ -26,6 +38,86 @@ function collectLeafKeys(value: unknown, prefix = '', result: string[] = []): st
   }
   if (prefix) result.push(prefix)
   return result
+}
+
+function usageCachePath(projectDirectory: string): string {
+  return path.join(projectDirectory, 'node_modules', '.cache', '@wads.dev', 'i18n-editor', 'usage.json')
+}
+
+function usageFingerprint(bundle: I18nBundle, config: EditorProjectConfig): string {
+  const referenceLanguage = Object.values(bundle.languages)[0]
+  const keys = referenceLanguage ? collectLeafKeys(referenceLanguage.translations).sort() : []
+  return createHash('sha256').update(JSON.stringify({
+    keys,
+    catalogFile: config.catalogFile,
+    levelImports: config.levelImports,
+    translationsDirectory: config.translationsDirectory,
+    importAliases: config.exportConfig.importAliases,
+  })).digest('hex')
+}
+
+async function readUsageCache(filePath: string): Promise<UsageCache | null> {
+  try {
+    const cache = JSON.parse(await fsPromises.readFile(filePath, 'utf8')) as UsageCache
+    if (cache.format !== USAGE_CACHE_FORMAT
+      || cache.version !== USAGE_CACHE_VERSION
+      || !cache.report?.entries) return null
+    return cache
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) return null
+    throw error
+  }
+}
+
+async function writeUsageCache(filePath: string, cache: UsageCache): Promise<void> {
+  await fsPromises.mkdir(path.dirname(filePath), { recursive: true })
+  const temporaryPath = `${filePath}.${process.pid}.tmp`
+  try {
+    await fsPromises.writeFile(temporaryPath, `${JSON.stringify(cache)}\n`, 'utf8')
+    await fsPromises.rename(temporaryPath, filePath)
+  } catch (error) {
+    await fsPromises.rm(temporaryPath, { force: true })
+    throw error
+  }
+}
+
+export async function inspectTranslationUsageCache(
+  options: UsageAnalysisOptions,
+): Promise<TranslationUsageResponse> {
+  const filePath = usageCachePath(options.projectDirectory)
+  const fingerprint = usageFingerprint(options.bundle, options.config)
+  const cache = await readUsageCache(filePath)
+  if (!cache) return { cacheStatus: 'missing', report: null }
+  return {
+    cacheStatus: cache.fingerprint === fingerprint ? 'verified' : 'unverified',
+    report: cache.report,
+  }
+}
+
+export async function refreshTranslationUsageCache(
+  options: UsageAnalysisOptions,
+): Promise<TranslationUsageResponse> {
+  const filePath = usageCachePath(options.projectDirectory)
+  const fingerprint = usageFingerprint(options.bundle, options.config)
+  const report = analyzeTranslationUsage(options)
+  await writeUsageCache(filePath, {
+    format: USAGE_CACHE_FORMAT,
+    version: USAGE_CACHE_VERSION,
+    fingerprint,
+    report,
+  })
+  return { cacheStatus: 'verified', report }
+}
+
+export async function analyzeTranslationUsageCached(
+  options: UsageAnalysisOptions,
+  refresh = false,
+): Promise<TranslationUsageReport> {
+  if (!refresh) {
+    const cached = await inspectTranslationUsageCache(options)
+    if (cached.cacheStatus === 'verified' && cached.report) return cached.report
+  }
+  return (await refreshTranslationUsageCache(options)).report!
 }
 
 function normalizePath(value: string): string {

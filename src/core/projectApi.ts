@@ -63,7 +63,14 @@ export type TranslationUsageReport = {
   entries: Record<string, TranslationUsageEntry>
 }
 
-export type TranslationUsageRequest = ProjectExportPreviewRequest
+export type TranslationUsageRequest = ProjectExportPreviewRequest & {
+  wait?: boolean
+}
+
+export type TranslationUsageResponse = {
+  cacheStatus: 'missing' | 'verified' | 'unverified'
+  report: TranslationUsageReport | null
+}
 
 export type ApiError = {
   error: string

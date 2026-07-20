@@ -31,13 +31,13 @@ export function renderExportPreview(container, bundle, config, checkedChanges = 
   const document = container.ownerDocument
 
   if (!bundle) {
-    container.textContent = 'Carregue um bundle para visualizar os arquivos de saída.'
+    container.textContent = 'Load a bundle to preview output files.'
     return
   }
 
   const plan = checkedChanges ?? buildExportPlan(bundle, config)
   if (plan.length === 0) {
-    container.textContent = 'Não há traduções para exportar.'
+    container.textContent = 'There are no translations to export.'
     return
   }
 
@@ -62,7 +62,7 @@ export function renderExportPreview(container, bundle, config, checkedChanges = 
       const details = document.createElement('details')
       details.className = 'export-diff-details'
       const summary = document.createElement('summary')
-      summary.textContent = 'Mostrar diff'
+      summary.textContent = 'Show diff'
       details.append(summary, createDiff(document, diff))
       item.append(details)
     }

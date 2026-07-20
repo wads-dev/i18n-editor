@@ -28,7 +28,7 @@ export function renderLevelImportFields(container, config, onChange) {
     card.className = 'level-import-card'
 
     const heading = document.createElement('h4')
-    heading.textContent = index === 0 ? 'Root (nível 0)' : `${getEditorLevelName(config, index)} (nível ${index})`
+    heading.textContent = index === 0 ? 'Root (level 0)' : `${getEditorLevelName(config, index)} (level ${index})`
 
     const pathLabel = document.createElement('label')
     pathLabel.className = 'level-field level-path-field'

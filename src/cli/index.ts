@@ -8,7 +8,7 @@ import { Command, InvalidArgumentError } from 'commander'
 import { createServer } from '../server/createServer.js'
 import { applyProjectExport, planProjectExport, type ProjectExportPlan } from '../server/exportProject.js'
 import { createProjectContext } from '../server/projectContext.js'
-import { analyzeTranslationUsage } from '../server/usageAnalysis.js'
+import { analyzeTranslationUsageCached } from '../server/usageAnalysis.js'
 import type { TranslationUsageReport } from '../core/projectApi.js'
 
 type CommonOptions = {
@@ -38,6 +38,7 @@ type UsageOptions = {
   file: string
   json?: boolean
   failOnUnreferenced?: boolean
+  refresh?: boolean
 }
 
 function parsePort(value: string): number {
@@ -184,11 +185,11 @@ async function analyzeUsage(command: Command, options: UsageOptions): Promise<vo
   const info = await project.getInfo()
   if (!info.config) throw new Error('Could not find i18n.config.json. Pass --config with the project configuration path.')
   if (!info.bundle) throw new Error(`Could not find the bundle at ${info.bundlePath}. Run the bundle command first or pass --file.`)
-  const report = analyzeTranslationUsage({
+  const report = await analyzeTranslationUsageCached({
     projectDirectory: project.projectDirectory,
     bundle: info.bundle,
     config: info.config,
-  })
+  }, options.refresh === true)
   if (options.json) console.log(JSON.stringify(report, null, 2))
   else printUsageReport(report)
   if (options.failOnUnreferenced
@@ -269,6 +270,7 @@ function createProgram(): Command {
     .description('analyze static references to every translation key')
     .option('-f, --file <path>', 'input bundle path', 'i18n.bundle.json')
     .option('--json', 'print the usage report as JSON')
+    .option('--refresh', 'ignore the disk cache and rebuild the usage report')
     .option('--fail-on-unreferenced', 'exit with code 1 when a key has no static references')
     .action(async (options: UsageOptions, command: Command) => {
       await analyzeUsage(command, options)

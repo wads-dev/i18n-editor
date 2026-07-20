@@ -18,7 +18,7 @@ export function createEditorState() {
       notify('replace')
     },
     update(updater: (current: I18nBundle) => I18nBundle): void {
-      if (!bundle) throw new Error('Não existe um bundle carregado para editar.')
+      if (!bundle) throw new Error('There is no loaded bundle to edit.')
       bundle = withUpdatedAt(updater(bundle))
       notify('edit')
     },
