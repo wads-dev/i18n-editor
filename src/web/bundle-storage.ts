@@ -1,11 +1,17 @@
 import { assertBundle, type I18nBundle } from '@wads.dev/i18n-ts/bundle'
 import type { EditorProjectConfig } from '../core/projectConfig.js'
+import {
+  REVIEW_BASELINE_FORMAT,
+  REVIEW_BASELINE_VERSION,
+  type ReviewBaseline,
+} from './review-baseline.js'
 
 const DATABASE_NAME = 'wads-i18n-editor'
 const DATABASE_VERSION = 1
 const STORE_NAME = 'bundles'
 const CURRENT_BUNDLE_KEY = 'current'
 const PROJECT_CONFIG_KEY = 'project-config'
+const REVIEW_BASELINE_KEY = 'review-baseline'
 const LEGACY_VISUALIZATION_CONFIG_KEY = 'visualization-config'
 
 function projectKey(projectDirectory: string, key: string): string {
@@ -14,6 +20,7 @@ function projectKey(projectDirectory: string, key: string): string {
 
 type StoredBundleRecord = { id: string; bundle: I18nBundle }
 type StoredConfigRecord = { id: string; config: EditorProjectConfig }
+type StoredReviewBaselineRecord = { id: string; baseline: ReviewBaseline }
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -89,6 +96,39 @@ export async function saveStoredProjectConfig(projectDirectory: string, config: 
   try {
     const transaction = database.transaction(STORE_NAME, 'readwrite')
     await requestResult(transaction.objectStore(STORE_NAME).put({ id: projectKey(projectDirectory, PROJECT_CONFIG_KEY), config }))
+    await transactionComplete(transaction)
+  } finally {
+    database.close()
+  }
+}
+
+export async function loadStoredReviewBaseline(projectDirectory: string): Promise<ReviewBaseline | null> {
+  const database = await openDatabase()
+  try {
+    const transaction = database.transaction(STORE_NAME, 'readonly')
+    const record = await requestResult<StoredReviewBaselineRecord | undefined>(
+      transaction.objectStore(STORE_NAME).get(projectKey(projectDirectory, REVIEW_BASELINE_KEY)),
+    )
+    await transactionComplete(transaction)
+    const baseline = record?.baseline
+    if (!baseline
+      || baseline.format !== REVIEW_BASELINE_FORMAT
+      || baseline.version !== REVIEW_BASELINE_VERSION
+      || !Array.isArray(baseline.keys)) return null
+    return baseline
+  } finally {
+    database.close()
+  }
+}
+
+export async function saveStoredReviewBaseline(projectDirectory: string, baseline: ReviewBaseline): Promise<void> {
+  const database = await openDatabase()
+  try {
+    const transaction = database.transaction(STORE_NAME, 'readwrite')
+    await requestResult(transaction.objectStore(STORE_NAME).put({
+      id: projectKey(projectDirectory, REVIEW_BASELINE_KEY),
+      baseline,
+    }))
     await transactionComplete(transaction)
   } finally {
     database.close()

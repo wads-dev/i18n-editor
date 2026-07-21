@@ -1,6 +1,6 @@
 {
   "name": "@wads.dev/i18n-editor",
-  "version": "0.0.1-beta.0",
+  "version": "0.0.1-rc.0",
   "description": "Local web editor for typed i18n projects.",
   "license": "MIT",
   "author": {

@@ -280,6 +280,7 @@ function createTranslationTable(document, languages, rows, depth, { onMoveKey, o
   rows.forEach((rowData) => {
     const row = body.insertRow()
     const { fullKey, languageEntries } = rowData
+    row.dataset.translationKey = fullKey
     row.dataset.search = [
       fullKey,
       ...languageEntries.map((entry) => entry?.text ?? ''),

@@ -64,7 +64,17 @@ export interface EditorTranslation extends Translation {
     loadingUsages: string
     updatingUsages: string
     unreferencedOnly: string
+    newKeysOnly: string
+    filters: string
+    markCurrentReviewed: string
+    expandAll: string
+    collapseAll: string
+    showToolbar: string
+    hideToolbar: string
+    noReviewBaseline: string
+    reviewSummary: (count: number) => string
     visualizationLevels: string
+    visualizationLevelsHelp: string
     search: string
     searchPlaceholder: string
     key: string
@@ -118,6 +128,7 @@ export interface EditorTranslation extends Translation {
     removeKeyConfirm: (key: string) => string
     keyRemoved: (key: string) => string
     translationUpdated: (language: string, key: string) => string
+    reviewBaselineSaved: (count: number) => string
     jsonObjectExpected: (field: string) => string
     couldNotSaveSettings: (error: string) => string
     couldNotSaveLocalCopy: (error: string) => string
@@ -129,12 +140,13 @@ export interface EditorTranslation extends Translation {
     exported: string
     generatingBundle: string
     generatedBundle: string
+    couldNotGenerateBundle: (error: string) => string
     restoredBundle: string
     loadedBundle: string
     newerBundle: string
     noUsageCache: string
     unverifiedUsageCache: string
-    usageSummary: (used: number, uncertain: number, unreferenced: number, files: number) => string
+    usageSummary: (used: number, uncertain: number, unreferenced: number) => string
     couldNotAnalyzeUsages: (error: string) => string
     plannedChanges: (count: number) => string
     projectMatchesPreview: string

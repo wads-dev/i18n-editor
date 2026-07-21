@@ -9,22 +9,25 @@
   </head>
   <body>
     <main class="page">
-      <header class="page-header">
-        <p class="eyebrow" data-i18n="page.eyebrow">i18n bundle</p>
-        <div class="page-title-row">
+      <header class="app-header">
+        <div class="app-identity">
+          <span class="eyebrow" data-i18n="page.eyebrow">i18n bundle</span>
           <h1 data-i18n="page.title">Translation Editor</h1>
-          <label class="language-field" for="editor-language">
-            <span data-i18n="language.label">Language</span>
+        </div>
+        <div class="app-actions">
+          <label class="compact-language-field" for="editor-language" data-i18n-title="language.label" title="Language">
             <select id="editor-language">
               <option value="en" data-i18n="language.english">English</option>
               <option value="pt" data-i18n="language.portuguese">Português</option>
             </select>
           </label>
+          <button id="toggle-translation-toolbar" class="icon-button" type="button" data-i18n-title="editor.hideToolbar" data-i18n-aria-label="editor.hideToolbar" aria-expanded="true" title="Hide toolbar" aria-label="Hide toolbar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5" /></svg>
+          </button>
           <button id="toggle-settings-panel" class="icon-button" type="button" aria-label="Show settings" aria-expanded="false" title="Show settings">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="m19.4 13.5 1.1.9-2 3.4-1.3-.5a8 8 0 0 1-1.8 1l-.2 1.4h-4l-.2-1.4a8 8 0 0 1-1.8-1l-1.3.5-2-3.4 1.1-.9a8.5 8.5 0 0 1 0-2l-1.1-.9 2-3.4 1.3.5a8 8 0 0 1 1.8-1l.2-1.4h4l.2 1.4a8 8 0 0 1 1.8 1l1.3-.5 2 3.4-1.1.9a8.5 8.5 0 0 1 0 2Z"/></svg>
           </button>
         </div>
-        <p class="intro" data-i18n="page.intro">The editor detects the current project's configuration and bundle. When necessary, it generates the bundle directly from the TypeScript catalog.</p>
       </header>
 
       <section id="project-status" class="project-status loading" role="status" aria-live="polite">
@@ -155,26 +158,42 @@
       </section>
 
       <section class="report" aria-labelledby="report-title">
-        <div class="report-header">
-          <div>
+        <div id="translation-toolbar" class="report-header">
+          <div class="report-heading">
             <h2 id="report-title" data-i18n="editor.title">Translations</h2>
             <p id="bundle-summary" data-i18n="editor.emptySummary">Load a bundle to view translations.</p>
             <p id="editor-feedback" class="feedback" role="status" aria-live="polite"></p>
+            <p id="review-summary" class="review-summary" role="status" aria-live="polite"></p>
           </div>
           <div class="translation-actions">
-            <button id="analyze-usage" class="secondary-button" type="button" data-i18n="editor.analyzeUsages" disabled>Analyze usages</button>
-            <label class="usage-filter" for="show-unreferenced">
-              <input id="show-unreferenced" type="checkbox" disabled>
-              <span data-i18n="editor.unreferencedOnly">Unreferenced only</span>
-            </label>
-            <label class="visual-level-field" for="visual-level-count">
-              <span data-i18n="editor.visualizationLevels">Visualization levels</span>
+            <section class="filter-box" aria-label="Filters" data-i18n-aria-label="editor.filters">
+              <label class="toolbar-toggle" for="show-unreferenced" data-i18n-title="editor.unreferencedOnly" title="Show unreferenced only">
+                <input id="show-unreferenced" type="checkbox" disabled>
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 4.4 2.8 18a2 2 0 0 0 1.75 3h14.9A2 2 0 0 0 21.2 18L13.7 4.4a2 2 0 0 0-3.4 0Z" /></svg>
+                <span data-i18n="editor.unreferencedOnly">Show unreferenced only</span>
+              </label>
+              <label class="toolbar-toggle toolbar-toggle--with-count" for="show-new-keys" data-i18n-title="editor.newKeysOnly" title="Show new keys only">
+                <input id="show-new-keys" type="checkbox" disabled>
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18" /><path d="m5 5 2 2m10-2-2 2m2 10-2-2M5 19l2-2" /></svg>
+                <span data-i18n="editor.newKeysOnly">Show new keys only</span>
+                <output id="new-key-count" class="filter-count"></output>
+              </label>
+              <input id="translation-search" class="search-field" type="search" data-i18n-placeholder="editor.searchPlaceholder" data-i18n-aria-label="editor.search" placeholder="Search by key or translation" aria-label="Search">
+            </section>
+            <label class="toolbar-field visual-level-field" for="visual-level-count" data-i18n-title="editor.visualizationLevelsHelp" title="Choose how many hierarchy levels become collapsible translation groups.">
+              <span data-i18n="editor.visualizationLevels">Levels</span>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
               <input id="visual-level-count" type="number" min="0" max="12" step="1" value="2">
             </label>
-            <label class="search-field" for="translation-search">
-              <span data-i18n="editor.search">Search</span>
-              <input id="translation-search" type="search" data-i18n-placeholder="editor.searchPlaceholder" placeholder="Key or translation">
-            </label>
+            <button id="analyze-usage" class="secondary-button icon-button toolbar-icon-button" type="button" data-i18n-title="editor.analyzeUsages" data-i18n-aria-label="editor.analyzeUsages" title="Analyze usages" aria-label="Analyze usages" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 1-2.34-5.66M20 4v7h-7" /></svg>
+            </button>
+            <button id="mark-current-reviewed" class="secondary-button icon-button toolbar-icon-button" type="button" data-i18n-title="editor.markCurrentReviewed" data-i18n-aria-label="editor.markCurrentReviewed" title="Mark current keys as reviewed" aria-label="Mark current keys as reviewed" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6M5 6h7M5 18h7" /></svg>
+            </button>
+            <button id="toggle-all-groups" class="secondary-button icon-button toolbar-icon-button" type="button" data-i18n-title="editor.expandAll" data-i18n-aria-label="editor.expandAll" title="Expand all" aria-label="Expand all" aria-pressed="false" disabled>
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m8 14 4 4 4-4M8 10l4-4 4 4M12 6v12" /></svg>
+            </button>
           </div>
         </div>
         <div id="empty-state" class="empty-state" data-i18n="editor.noBundle">No bundle loaded.</div>

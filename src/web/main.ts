@@ -1,8 +1,10 @@
 import {
   loadStoredBundle,
   loadStoredProjectConfig,
+  loadStoredReviewBaseline,
   saveStoredBundle,
   saveStoredProjectConfig,
+  saveStoredReviewBaseline,
 } from './bundle-storage.js'
 import { moveKey } from '../core/moveKey.js'
 import { removeKey } from '../core/removeKey.js'
@@ -16,6 +18,12 @@ import { createEditorView } from './view.js'
 import type { ProjectExportPreviewChange, TranslationUsageReport } from '../core/projectApi.js'
 import { initializeLanguage, setLanguage, type EditorLanguage } from './language.js'
 import { translateHtml } from '@wads.dev/i18n-html'
+import type { I18nBundle } from '@wads.dev/i18n-ts/bundle'
+import {
+  createReviewBaseline,
+  getNewReviewKeys,
+  type ReviewBaseline,
+} from './review-baseline.js'
 
 await initializeLanguage()
 
@@ -27,6 +35,20 @@ function translateStaticDocument(): void {
 translateStaticDocument()
 
 const state = createEditorState()
+const REVIEW_FILTER_STORAGE_KEY = '@wads.dev/i18n-editor/show-new-keys'
+const TOOLBAR_VISIBILITY_STORAGE_KEY = '@wads.dev/i18n-editor/translation-toolbar-visible'
+
+function getReviewFilterStorageKey(projectDirectory: string): string {
+  return `${REVIEW_FILTER_STORAGE_KEY}:${projectDirectory}`
+}
+
+function loadShowNewKeysPreference(projectDirectory: string): boolean {
+  return localStorage.getItem(getReviewFilterStorageKey(projectDirectory)) === 'true'
+}
+
+function saveShowNewKeysPreference(projectDirectory: string, value: boolean): void {
+  localStorage.setItem(getReviewFilterStorageKey(projectDirectory), String(value))
+}
 
 function getElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector)
@@ -67,6 +89,8 @@ const elements = {
   summary: getElement<HTMLElement>('#bundle-summary'),
   settingsPanel: getElement<HTMLElement>('#settings-panel'),
   tableWrap: getElement<HTMLElement>('#table-wrap'),
+  translationToolbar: getElement<HTMLElement>('#translation-toolbar'),
+  toggleTranslationToolbar: getElement<HTMLButtonElement>('#toggle-translation-toolbar'),
   toggleSettingsPanel: getElement<HTMLButtonElement>('#toggle-settings-panel'),
   projectStatus: getElement<HTMLElement>('#project-status'),
   projectStatusText: getElement<HTMLElement>('#project-status-text'),
@@ -74,16 +98,36 @@ const elements = {
   analyzeUsage: getElement<HTMLButtonElement>('#analyze-usage'),
   language: getElement<HTMLSelectElement>('#editor-language'),
   showUnreferenced: getElement<HTMLInputElement>('#show-unreferenced'),
+  showNewKeys: getElement<HTMLInputElement>('#show-new-keys'),
+  newKeyCount: getElement<HTMLOutputElement>('#new-key-count'),
+  markCurrentReviewed: getElement<HTMLButtonElement>('#mark-current-reviewed'),
+  toggleAllGroups: getElement<HTMLButtonElement>('#toggle-all-groups'),
+  reviewSummary: getElement<HTMLElement>('#review-summary'),
   visualLevelCount: getElement<HTMLInputElement>('#visual-level-count'),
 }
 
+function setIconButtonLabel(button: HTMLButtonElement, label: string): void {
+  button.title = label
+  button.setAttribute('aria-label', label)
+}
+
+function setAllGroupsToggleState(expanded: boolean): void {
+  const label = expanded ? Lang.editor.collapseAll : Lang.editor.expandAll
+  setIconButtonLabel(elements.toggleAllGroups, label)
+  elements.toggleAllGroups.setAttribute('aria-pressed', String(expanded))
+  elements.toggleAllGroups.classList.toggle('is-expanded', expanded)
+}
+
 let settingsPanelVisible = false
+let translationToolbarVisible = localStorage.getItem(TOOLBAR_VISIBILITY_STORAGE_KEY) !== 'false'
 let projectConfig = createDefaultEditorProjectConfig()
 let currentProjectDirectory = ''
+let canGenerateProjectBundle = false
 let checkedExportChanges: ProjectExportPreviewChange[] | null = null
 let exportPreviewRequestVersion = 0
 let visualLevelCountOverride: number | null = null
 let currentUsageReport: TranslationUsageReport | null = null
+let reviewBaseline: ReviewBaseline | null = null
 
 function replaceUsageReport(report: TranslationUsageReport | null): void {
   currentUsageReport = report
@@ -117,6 +161,30 @@ function removeUsageKey(keyToRemove: string): void {
   replaceUsageReport({ ...currentUsageReport, entries })
 }
 
+function updateReviewControls(bundle = state.getBundle()): void {
+  const newKeys = bundle ? getNewReviewKeys(bundle, reviewBaseline) : []
+  view.setNewKeys(newKeys)
+  elements.markCurrentReviewed.disabled = !bundle
+  elements.toggleAllGroups.disabled = !bundle
+  if (!bundle) setAllGroupsToggleState(false)
+  elements.showNewKeys.disabled = !bundle || reviewBaseline === null
+  elements.newKeyCount.textContent = reviewBaseline ? String(newKeys.length) : ''
+  if (!bundle) {
+    elements.showNewKeys.checked = false
+    view.setShowNewKeys(false)
+    elements.reviewSummary.textContent = ''
+    return
+  }
+  if (!reviewBaseline) {
+    elements.showNewKeys.checked = false
+    view.setShowNewKeys(false)
+    elements.reviewSummary.textContent = Lang.editor.noReviewBaseline
+    return
+  }
+  view.setShowNewKeys(elements.showNewKeys.checked)
+  elements.reviewSummary.textContent = Lang.editor.reviewSummary(newKeys.length)
+}
+
 function renderCurrentExportPreview() {
   renderExportPreview(elements.exportPreview, state.getBundle(), projectConfig, checkedExportChanges)
 }
@@ -135,7 +203,7 @@ function invalidateExportPreview() {
 function invalidateUsageAnalysis(message = ''): void {
   view.setUsageReport(currentUsageReport)
   elements.analyzeUsage.disabled = !state.getBundle()
-  elements.analyzeUsage.textContent = currentUsageReport ? Lang.editor.updateUsages : Lang.editor.analyzeUsages
+  setIconButtonLabel(elements.analyzeUsage, currentUsageReport ? Lang.editor.updateUsages : Lang.editor.analyzeUsages)
   if (message) setFeedback(message)
 }
 
@@ -193,6 +261,15 @@ function setSettingsPanelVisibility(visible) {
     visible ? Lang.settings.hide : Lang.settings.show,
   )
   elements.toggleSettingsPanel.title = elements.toggleSettingsPanel.getAttribute('aria-label')
+}
+
+function setTranslationToolbarVisibility(visible: boolean, persist = true): void {
+  translationToolbarVisible = visible
+  elements.translationToolbar.hidden = !visible
+  elements.toggleTranslationToolbar.setAttribute('aria-expanded', String(visible))
+  setIconButtonLabel(elements.toggleTranslationToolbar, visible ? Lang.editor.hideToolbar : Lang.editor.showToolbar)
+  elements.toggleTranslationToolbar.classList.toggle('toolbar-collapsed', !visible)
+  if (persist) localStorage.setItem(TOOLBAR_VISIBILITY_STORAGE_KEY, String(visible))
 }
 
 let projectConfigQueue = Promise.resolve()
@@ -283,6 +360,8 @@ function persistBundle(bundle) {
 
 state.subscribe((bundle) => {
   view.render(bundle)
+  setAllGroupsToggleState(false)
+  updateReviewControls(bundle)
   invalidateExportPreview()
   invalidateUsageAnalysis()
   if (bundle) persistBundle(bundle)
@@ -293,13 +372,20 @@ elements.toggleSettingsPanel.addEventListener('click', () => {
   setSettingsPanelVisibility(!settingsPanelVisible)
 })
 
+elements.toggleTranslationToolbar.addEventListener('click', () => {
+  setTranslationToolbarVisibility(!translationToolbarVisible)
+})
+
 elements.language.value = globalThis.CurrentLanguage
 elements.language.addEventListener('change', async () => {
   await setLanguage(elements.language.value as EditorLanguage)
   translateStaticDocument()
+  setTranslationToolbarVisibility(translationToolbarVisible, false)
   setSettingsPanelVisibility(settingsPanelVisible)
   applyProjectConfig(projectConfig, false)
   view.render(state.getBundle())
+  setAllGroupsToggleState(false)
+  updateReviewControls()
   invalidateExportPreview()
   invalidateUsageAnalysis()
 })
@@ -309,7 +395,7 @@ async function loadUsageAnalysis(wait: boolean): Promise<void> {
   if (!bundle) return
   const config = projectConfig
   elements.analyzeUsage.disabled = true
-  elements.analyzeUsage.textContent = wait ? Lang.editor.updatingUsages : Lang.editor.loadingUsages
+  setIconButtonLabel(elements.analyzeUsage, wait ? Lang.editor.updatingUsages : Lang.editor.loadingUsages)
   try {
     const cached = await analyzeProjectUsage(bundle, config, wait)
     if (state.getBundle() !== bundle || projectConfig !== config) return
@@ -328,21 +414,58 @@ async function loadUsageAnalysis(wait: boolean): Promise<void> {
     const used = usages.filter(({ status }) => status === 'used').length
     const uncertain = usages.filter(({ status }) => status === 'uncertain').length
     const unreferenced = usages.filter(({ status }) => status === 'unreferenced').length
-    setFeedback(Lang.messages.usageSummary(used, uncertain, unreferenced, report.sourceFileCount))
+    setFeedback(Lang.messages.usageSummary(used, uncertain, unreferenced))
   } catch (error) {
     setFeedback(Lang.messages.couldNotAnalyzeUsages(error instanceof Error ? error.message : String(error)), true)
   } finally {
     elements.analyzeUsage.disabled = !state.getBundle()
-    elements.analyzeUsage.textContent = currentUsageReport ? Lang.editor.updateUsages : Lang.editor.analyzeUsages
+    setIconButtonLabel(elements.analyzeUsage, currentUsageReport ? Lang.editor.updateUsages : Lang.editor.analyzeUsages)
   }
 }
 
 elements.analyzeUsage.addEventListener('click', async () => {
+  const bundleBeforeRefresh = state.getBundle()
+  if (bundleBeforeRefresh && canGenerateProjectBundle) {
+    elements.analyzeUsage.disabled = true
+    setIconButtonLabel(elements.analyzeUsage, Lang.messages.generatingBundle)
+    await refreshBundleFromProject(bundleBeforeRefresh)
+  }
   await loadUsageAnalysis(true)
 })
 
 elements.showUnreferenced.addEventListener('change', () => {
   view.setShowUnreferenced(elements.showUnreferenced.checked)
+})
+
+elements.showNewKeys.addEventListener('change', () => {
+  view.setShowNewKeys(elements.showNewKeys.checked)
+  if (!currentProjectDirectory) return
+  try {
+    saveShowNewKeysPreference(currentProjectDirectory, elements.showNewKeys.checked)
+  } catch (error) {
+    setFeedback(Lang.messages.couldNotSaveLocalCopy(error instanceof Error ? error.message : String(error)), true)
+  }
+})
+
+elements.markCurrentReviewed.addEventListener('click', async () => {
+  const bundle = state.getBundle()
+  if (!bundle || !currentProjectDirectory) return
+  const nextBaseline = createReviewBaseline(bundle)
+  elements.markCurrentReviewed.disabled = true
+  try {
+    await saveStoredReviewBaseline(currentProjectDirectory, nextBaseline)
+    reviewBaseline = nextBaseline
+    updateReviewControls(bundle)
+    setFeedback(Lang.messages.reviewBaselineSaved(nextBaseline.keys.length))
+  } catch (error) {
+    setFeedback(Lang.messages.couldNotSaveLocalCopy(error instanceof Error ? error.message : String(error)), true)
+  } finally {
+    elements.markCurrentReviewed.disabled = !state.getBundle()
+  }
+})
+
+elements.toggleAllGroups.addEventListener('click', () => {
+  setAllGroupsToggleState(view.toggleAllGroups())
 })
 
 elements.visualLevelCount.addEventListener('input', () => {
@@ -667,16 +790,39 @@ function hideProjectStatus() {
   elements.projectStatus.hidden = true
 }
 
+async function refreshBundleFromProject(bundleBeforeRefresh: I18nBundle, refreshUsage = false): Promise<boolean> {
+  if (!canGenerateProjectBundle) return false
+
+  try {
+    const generatedBundle = (await generateProjectBundle()).bundle
+    if (state.getBundle() !== bundleBeforeRefresh) return false
+    state.replaceBundle(generatedBundle)
+    setFeedback(Lang.messages.generatedBundle)
+    if (refreshUsage) void loadUsageAnalysis(false)
+    return true
+  } catch (error) {
+    setFeedback(
+      Lang.messages.couldNotGenerateBundle(error instanceof Error ? error.message : String(error)),
+      true,
+    )
+    return false
+  }
+}
+
 async function loadProject() {
   setProjectStatus(Lang.messages.connecting)
 
   try {
     const info = await getProjectInfo()
     currentProjectDirectory = info.projectDirectory
-    const [storedBundle, storedConfig] = await Promise.all([
+    canGenerateProjectBundle = info.canGenerateBundle
+    const [storedBundle, storedConfig, storedReviewBaseline] = await Promise.all([
       loadStoredBundle(currentProjectDirectory),
       loadStoredProjectConfig(currentProjectDirectory),
+      loadStoredReviewBaseline(currentProjectDirectory),
     ])
+    reviewBaseline = storedReviewBaseline
+    elements.showNewKeys.checked = reviewBaseline !== null && loadShowNewKeysPreference(currentProjectDirectory)
 
     if (info.config) {
       applyProjectConfig(info.config, false)
@@ -684,30 +830,33 @@ async function loadProject() {
       applyProjectConfig(storedConfig, false)
     }
 
-    let projectBundle = info.bundle
-    let generated = false
-    if (!projectBundle) {
-      if (!info.canGenerateBundle) {
-        throw new Error(Lang.messages.missingCatalog)
-      }
-      setProjectStatus(Lang.messages.generatingBundle)
-      projectBundle = (await generateProjectBundle()).bundle
-      generated = true
+    const projectBundle = info.bundle
+    if (!projectBundle && !storedBundle && !info.canGenerateBundle) {
+      throw new Error(Lang.messages.missingCatalog)
     }
 
-    const projectIsNewer = storedBundle && projectBundle.updatedAt > storedBundle.updatedAt
-    const selectedBundle = !storedBundle || projectIsNewer ? projectBundle : storedBundle
+    const projectIsNewer = Boolean(storedBundle && projectBundle && projectBundle.updatedAt > storedBundle.updatedAt)
+    const selectedBundle = !storedBundle || (projectBundle && projectIsNewer) ? projectBundle : storedBundle
 
-    if (projectIsNewer && !generated) {
+    if (projectIsNewer) {
       window.alert(Lang.messages.newerBundle)
     }
 
-    state.replaceBundle(selectedBundle)
-    setFeedback(generated
-      ? Lang.messages.generatedBundle
-      : selectedBundle === storedBundle
+    if (selectedBundle) {
+      state.replaceBundle(selectedBundle)
+      setFeedback(selectedBundle === storedBundle
         ? Lang.messages.restoredBundle
         : Lang.messages.loadedBundle)
+      hideProjectStatus()
+      void loadUsageAnalysis(false)
+      void refreshBundleFromProject(selectedBundle, true)
+      return
+    }
+
+    setProjectStatus(Lang.messages.generatingBundle)
+    const generatedBundle = (await generateProjectBundle()).bundle
+    state.replaceBundle(generatedBundle)
+    setFeedback(Lang.messages.generatedBundle)
     hideProjectStatus()
     void loadUsageAnalysis(false)
   } catch (error) {
@@ -720,5 +869,6 @@ async function loadProject() {
 
 applyProjectConfig(projectConfig, false)
 setSettingsPanelVisibility(false)
+setTranslationToolbarVisibility(translationToolbarVisible, false)
 elements.retryProjectLoad.addEventListener('click', () => void loadProject())
 void loadProject()

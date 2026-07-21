@@ -23,7 +23,7 @@ The Editor is a local Node.js application with a browser interface. The publishe
 
 - The CLI fixes the project root, configuration, catalog and bundle paths at startup. Browser requests cannot choose filesystem paths.
 - `GET /api/project` reads the current project configuration and bundle and reports whether a catalog is available for generation.
-- `POST /api/bundle` runs the `@wads.dev/i18n-ts` bundler for the fixed catalog and writes only the configured bundle file.
+- `POST /api/bundle` runs the `@wads.dev/i18n-ts` bundler for the fixed catalog and writes only the configured bundle file. The browser renders its cached bundle immediately on load, then refreshes the project bundle asynchronously when a catalog is available; a bundle edited during that refresh is preserved in memory. An explicit usage refresh regenerates the bundle first, then analyzes that refreshed bundle.
 - `POST /api/export-preview` compares the browser's in-memory bundle and configuration with the fixed project filesystem. It is read-only and returns relative paths, statuses and unified diffs, never generated contents or absolute paths.
 - `POST /api/export` recalculates that plan from the browser's in-memory bundle and configuration, then writes generated sources through the same atomic export operation used by the CLI. Obsolete files require either project `autoDelete` or explicit confirmation from the editor request.
 - `POST /api/usage-analysis` returns the latest disk-cached usage report immediately by default. The response marks it as `verified`, `unverified` or `missing`; this read-only request never starts an analysis. Passing `wait: true` builds a TypeScript Program from the fixed project's `tsconfig.json`, maps root translation leaf symbols, returns exact and uncertain source references and atomically replaces the cache.
@@ -33,6 +33,8 @@ The Editor is a local Node.js application with a browser interface. The publishe
 The default project is the process working directory. CLI arguments override discovery, followed by `catalogFile` from `i18n.config.json`, then conventional catalog paths.
 
 Browser-persisted bundles and project configuration are keyed by the `projectDirectory` returned by `GET /api/project`. They must never cross project boundaries, even when two editor instances share the same browser origin. The editor interface language is intentionally global to the browser and is not project-scoped.
+
+Review baselines are IndexedDB-persisted and project-scoped because they can contain large key sets. The selected **New keys only** filter is a project-scoped `localStorage` preference. A baseline contains only the translation key set at the moment a user explicitly marks it reviewed. It is never created or updated by loading, editing or exporting a bundle. The filter compares the in-memory bundle with that baseline; value-level review is a future extension.
 
 `i18n-edit preview` is the read-only CLI representation of the Web Editor export preview. Both originate from the same environment-neutral `buildExportPlan` operation; the server enriches that plan with filesystem states, obsolete files and unified diffs. The CLI displays diffs by default and accepts `--no-diff`; the browser requests them only through its explicit verification action.
 

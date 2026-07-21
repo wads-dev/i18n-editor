@@ -7,13 +7,16 @@ export function createEditorView({ emptyState, tableWrap, tableContainer, summar
   let projectConfig = createDefaultEditorProjectConfig()
   let usageReport = null
   let showUnreferenced = false
+  let showNewKeys = false
+  let newKeys = new Set()
 
   function applyFilters() {
     const query = search.value.trim().toLocaleLowerCase()
     currentRows.forEach((row) => {
       const matchesSearch = query === '' || row.dataset.search.includes(query)
       const matchesUsage = !showUnreferenced || row.dataset.usageStatus === 'unreferenced'
-      row.hidden = !matchesSearch || !matchesUsage
+      const matchesReview = !showNewKeys || newKeys.has(row.dataset.translationKey)
+      row.hidden = !matchesSearch || !matchesUsage || !matchesReview
     })
     tableContainer.querySelectorAll('.table-group, .translation-group').forEach((group) => {
       group.hidden = group.querySelector('tbody tr:not([hidden])') === null
@@ -58,6 +61,22 @@ export function createEditorView({ emptyState, tableWrap, tableContainer, summar
     setShowUnreferenced(value) {
       showUnreferenced = value
       applyFilters()
+    },
+    setNewKeys(keys) {
+      newKeys = new Set(keys)
+      if (currentBundle) applyFilters()
+    },
+    setShowNewKeys(value) {
+      showNewKeys = value
+      applyFilters()
+    },
+    toggleAllGroups() {
+      const groups = [...tableContainer.querySelectorAll('details.translation-group')]
+      const expand = groups.some((group) => !group.open)
+      groups.forEach((group) => {
+        group.open = expand
+      })
+      return expand
     },
   }
 }
