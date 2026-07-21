@@ -57,3 +57,9 @@ export function getNewReviewKeys(bundle: I18nBundle, baseline: ReviewBaseline | 
   const reviewedKeys = new Set(baseline.keys)
   return getBundleTranslationKeys(bundle).filter((key) => !reviewedKeys.has(key))
 }
+
+export function getRemovedReviewKeys(bundle: I18nBundle, baseline: ReviewBaseline | null): string[] {
+  if (!baseline) return []
+  const currentKeys = new Set(getBundleTranslationKeys(bundle))
+  return baseline.keys.filter((key) => !currentKeys.has(key))
+}

@@ -72,11 +72,12 @@ export interface EditorTranslation extends Translation {
     showToolbar: string
     hideToolbar: string
     noReviewBaseline: string
-    reviewSummary: (count: number) => string
+    reviewSummary: (addedCount: number, removedCount: number) => string
     visualizationLevels: string
     visualizationLevelsHelp: string
     search: string
     searchPlaceholder: string
+    removed: string
     key: string
     usages: string
     base: string

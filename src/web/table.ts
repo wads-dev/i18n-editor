@@ -205,7 +205,7 @@ function beginTextEdit(cell, originalValue, onCommit) {
   input.select()
 }
 
-function createRows(bundle: I18nBundle) {
+function createRows(bundle: I18nBundle, removedKeys: string[] = []) {
   const languages = Object.entries(bundle.languages)
   const flattenedTranslations = Object.fromEntries(
     languages.map(([key, language]) => [key, flatten(language.translations)]),
@@ -213,12 +213,25 @@ function createRows(bundle: I18nBundle) {
   const keys = [...new Set(Object.values(flattenedTranslations).flatMap((entries) => [...entries.keys()]))]
     .sort((left, right) => left.localeCompare(right))
 
+  const currentRows = keys.map((fullKey) => ({
+    fullKey,
+    removed: false,
+    languageEntries: languages.map(([languageKey]) => flattenedTranslations[languageKey].get(fullKey)),
+  }))
+  const currentKeySet = new Set(keys)
+  const removedRows = removedKeys
+    .filter((fullKey) => !currentKeySet.has(fullKey))
+    .sort((left, right) => left.localeCompare(right))
+    .map((fullKey) => ({
+      fullKey,
+      removed: true,
+      languageEntries: languages.map(() => undefined),
+    }))
+
   return {
     languages,
-    rows: keys.map((fullKey) => ({
-      fullKey,
-      languageEntries: languages.map(([languageKey]) => flattenedTranslations[languageKey].get(fullKey)),
-    })),
+    rows: [...currentRows, ...removedRows],
+    currentKeyCount: currentRows.length,
   }
 }
 
@@ -279,13 +292,15 @@ function createTranslationTable(document, languages, rows, depth, { onMoveKey, o
   const body = table.createTBody()
   rows.forEach((rowData) => {
     const row = body.insertRow()
-    const { fullKey, languageEntries } = rowData
+    const { fullKey, languageEntries, removed } = rowData
+    if (removed) row.classList.add('review-removed-row')
     row.dataset.translationKey = fullKey
+    row.dataset.reviewStatus = removed ? 'removed' : 'current'
     row.dataset.search = [
       fullKey,
       ...languageEntries.map((entry) => entry?.text ?? ''),
     ].join(' ').toLocaleLowerCase()
-    row.dataset.usageStatus = usageReport?.entries[fullKey]?.status || 'not-analyzed'
+    row.dataset.usageStatus = removed ? 'removed' : usageReport?.entries[fullKey]?.status || 'not-analyzed'
 
     const keyCell = document.createElement('td')
     keyCell.className = 'key'
@@ -293,11 +308,11 @@ function createTranslationTable(document, languages, rows, depth, { onMoveKey, o
     keyContent.className = 'key-content'
     const keyLabel = document.createElement('span')
     keyLabel.textContent = getRelativeKey(fullKey, depth)
-    if (onMoveKey) {
+    if (!removed && onMoveKey) {
       keyCell.title = Lang.editor.doubleClickMove
       keyCell.addEventListener('dblclick', () => onMoveKey(fullKey))
     }
-    if (onRemoveKey) {
+    if (!removed && onRemoveKey) {
       const removeButton = document.createElement('button')
       removeButton.type = 'button'
       removeButton.className = [
@@ -317,15 +332,17 @@ function createTranslationTable(document, languages, rows, depth, { onMoveKey, o
     keyContent.append(keyLabel)
     keyCell.append(keyContent)
     row.append(keyCell)
-    row.append(createUsageCell(document, usageReport?.entries[fullKey]))
+    row.append(removed
+      ? createCell(document, Lang.editor.removed, 'usage-cell review-removed-value')
+      : createUsageCell(document, usageReport?.entries[fullKey]))
 
     languages.forEach(([languageKey], index) => {
       const entry = languageEntries[index]
       const className = ['language-value', entry?.type === 'function' ? 'function-value' : '']
         .filter(Boolean)
         .join(' ')
-      const valueCell = createCell(document, entry?.text ?? Lang.editor.missing, className)
-      if (entry?.type === 'string' && onEditValue) {
+      const valueCell = createCell(document, entry?.text ?? (removed ? Lang.editor.removed : Lang.editor.missing), className)
+      if (!removed && entry?.type === 'string' && onEditValue) {
         valueCell.title = Lang.editor.doubleClickEdit
         valueCell.addEventListener('dblclick', () => {
           beginTextEdit(valueCell, entry.text, (value) => onEditValue({
@@ -338,7 +355,7 @@ function createTranslationTable(document, languages, rows, depth, { onMoveKey, o
       row.append(valueCell)
     })
 
-    const base = describeBase(languageEntries)
+    const base = removed ? { label: Lang.editor.removed, type: 'removed' } : describeBase(languageEntries)
     row.append(createCell(document, base.label, `base-value base-${base.type}`))
   })
 
@@ -398,21 +415,22 @@ type RenderTranslationOptions = {
   onMoveKey?: (sourceKey: string) => void
   onRemoveKey?: (key: string) => void
   onEditValue?: (change: { languageKey: string; key: string; value: string }) => boolean
+  removedKeys?: string[]
 }
 
 export function renderTranslationTables(
   container: HTMLElement,
   bundle: I18nBundle,
-  { projectConfig, usageReport, onMoveKey, onRemoveKey, onEditValue }: RenderTranslationOptions,
+  { projectConfig, usageReport, onMoveKey, onRemoveKey, onEditValue, removedKeys }: RenderTranslationOptions,
 ) {
   activeUsagePopover?.close()
   const document = container.ownerDocument
-  const { languages, rows } = createRows(bundle)
+  const { languages, rows, currentKeyCount } = createRows(bundle, removedKeys)
   const normalizedLevelCount = Math.max(0, Number.isInteger(projectConfig?.levelCount) ? projectConfig.levelCount : 0)
   const tree = createGroupTree(rows, normalizedLevelCount)
   const fragment = document.createDocumentFragment()
 
   appendTableGroup(document, fragment, tree, languages, { projectConfig, usageReport, onMoveKey, onRemoveKey, onEditValue }, true)
   container.replaceChildren(fragment)
-  return rows.length
+  return currentKeyCount
 }

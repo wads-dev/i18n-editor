@@ -92,6 +92,10 @@ h2 { margin-bottom: 4px; font-size: 18px; }
 .usage-popover-uncertain { border-color: #f0c078; }
 .usage-popover-unreferenced { border-color: #f2b8b5; }
 .usage-empty { color: var(--muted); }
+.review-removed-row { color: #9f1239; background: #fff1f2; }
+.review-removed-row td { border-color: #fecdd3; }
+.review-removed-row .key { color: #881337; font-weight: 800; text-decoration: line-through; text-decoration-color: #fb7185; }
+.review-removed-value, .base-removed { color: #be123c; font-weight: 800; }
 .key-content { display: flex; align-items: center; justify-content: flex-start; gap: 8px; }
 .key-content > span { min-width: 0; overflow-wrap: anywhere; }
 .remove-key-button { display: inline-grid; place-items: center; width: 24px; height: 24px; flex: 0 0 auto; padding: 0; border: 1px solid transparent; border-radius: 6px; color: #9f3a38; background: transparent; font: 700 18px/1 sans-serif; cursor: pointer; opacity: .22; }

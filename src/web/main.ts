@@ -22,6 +22,7 @@ import type { I18nBundle } from '@wads.dev/i18n-ts/bundle'
 import {
   createReviewBaseline,
   getNewReviewKeys,
+  getRemovedReviewKeys,
   type ReviewBaseline,
 } from './review-baseline.js'
 
@@ -163,12 +164,13 @@ function removeUsageKey(keyToRemove: string): void {
 
 function updateReviewControls(bundle = state.getBundle()): void {
   const newKeys = bundle ? getNewReviewKeys(bundle, reviewBaseline) : []
-  view.setNewKeys(newKeys)
+  const removedKeys = bundle ? getRemovedReviewKeys(bundle, reviewBaseline) : []
+  view.setReviewKeys(newKeys, removedKeys)
   elements.markCurrentReviewed.disabled = !bundle
   elements.toggleAllGroups.disabled = !bundle
   if (!bundle) setAllGroupsToggleState(false)
   elements.showNewKeys.disabled = !bundle || reviewBaseline === null
-  elements.newKeyCount.textContent = reviewBaseline ? String(newKeys.length) : ''
+  elements.newKeyCount.textContent = reviewBaseline ? String(newKeys.length + removedKeys.length) : ''
   if (!bundle) {
     elements.showNewKeys.checked = false
     view.setShowNewKeys(false)
@@ -182,7 +184,7 @@ function updateReviewControls(bundle = state.getBundle()): void {
     return
   }
   view.setShowNewKeys(elements.showNewKeys.checked)
-  elements.reviewSummary.textContent = Lang.editor.reviewSummary(newKeys.length)
+  elements.reviewSummary.textContent = Lang.editor.reviewSummary(newKeys.length, removedKeys.length)
 }
 
 function renderCurrentExportPreview() {

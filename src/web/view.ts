@@ -8,14 +8,18 @@ export function createEditorView({ emptyState, tableWrap, tableContainer, summar
   let usageReport = null
   let showUnreferenced = false
   let showNewKeys = false
-  let newKeys = new Set()
+  let newKeys = new Set<string>()
+  let removedKeys = new Set<string>()
 
   function applyFilters() {
     const query = search.value.trim().toLocaleLowerCase()
     currentRows.forEach((row) => {
       const matchesSearch = query === '' || row.dataset.search.includes(query)
       const matchesUsage = !showUnreferenced || row.dataset.usageStatus === 'unreferenced'
-      const matchesReview = !showNewKeys || newKeys.has(row.dataset.translationKey)
+      const isRemoved = row.dataset.reviewStatus === 'removed'
+      const matchesReview = showNewKeys
+        ? newKeys.has(row.dataset.translationKey) || removedKeys.has(row.dataset.translationKey)
+        : !isRemoved
       row.hidden = !matchesSearch || !matchesUsage || !matchesReview
     })
     tableContainer.querySelectorAll('.table-group, .translation-group').forEach((group) => {
@@ -40,6 +44,7 @@ export function createEditorView({ emptyState, tableWrap, tableContainer, summar
       const keyCount = renderTranslationTables(tableContainer, bundle, {
         projectConfig,
         usageReport,
+        removedKeys: [...removedKeys],
         onMoveKey,
         onRemoveKey,
         onEditValue,
@@ -62,9 +67,10 @@ export function createEditorView({ emptyState, tableWrap, tableContainer, summar
       showUnreferenced = value
       applyFilters()
     },
-    setNewKeys(keys) {
+    setReviewKeys(keys, removed) {
       newKeys = new Set(keys)
-      if (currentBundle) applyFilters()
+      removedKeys = new Set(removed)
+      if (currentBundle) this.render(currentBundle)
     },
     setShowNewKeys(value) {
       showNewKeys = value
